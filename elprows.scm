@@ -6,6 +6,7 @@
   (use google-elevation)
   (use gauche.sequence)
   (use svg-plot)
+  (use sxml.serializer)
   (export
    elprows-main))
 
