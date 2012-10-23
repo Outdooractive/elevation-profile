@@ -1,0 +1,63 @@
+-*- mode: compilation -*-
+grep -nH -e Copyright *.scm
+
+dem-gdal.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+elpro-client.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+elpro.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+format-json.scm:4:;;; Copyright (c) 2009-2012 Jens Thiele <karme@karme.de>
+format-json.scm:8:;;;   Copyright (c) 2006 Rui Ueyama (rui314@gmail.com)
+geod.scm:6:;;; Copyright (C) 2010-2012 Jens Thiele <karme@karme.de>
+google-elevation.scm:3:;;;   Copyright (c) 2010-2012 Jens Thiele <karme@karme.de>
+google-elevation.scm:5:;;;   Copyright (c) 2000-2012  Shiro Kawai  <shiro@acm.org>
+runtime-compile.scm:4:;;;   Copyright (c) 2011 Jens Thiele <karme@karme.de>
+svg-plot.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+
+gmted2010_mn30@480.tif:
+
+downsampled (480 arc-seconds) version of Global Multi-resolution
+Terrain Elevation Data 2010 (GMTED2010) [0] 30 arc-seconds mean layer
+for testing.
+
+The GMTED2010 data is according to:
+http://topotools.cr.usgs.gov/GMTED_viewer/gmted2010_fgdc_metadata.xml
+"
+<citation>
+<citeinfo>
+<origin>U.S. Geological Survey (USGS) Earth Resources Observation
+&amp; Science (EROS) Center</origin>
+<pubdate>2011</pubdate>
+<title>GMTED2010</title>
+<geoform>raster digital data</geoform>
+</citeinfo>
+</citation>
+
+<accconst>No restrictions, All GMTED2010 data products are publically
+available. Any acquisition or use of these data signifies a user's
+agreement to comprehension and compliance of the USGS Standard
+Disclaimer. Ensure all portions of metadata are read and clearly
+understood before using these data in order to protect both user and
+USGS interests. Please refer to http://www.usgs.gov/privacy.html for
+the USGS disclaimer.</accconst>
+    
+<useconst>Although the USGS is making these data available to others
+who may find the data of value, USGS does not warrant, endorse, or
+recommend the use of these data for any given purpose. The user
+assumes the entire risk related to the use of these data. USGS is
+providing these data "as is", and USGS disclaims any and all
+warranties, whether expressed or implied, including (without
+limitation) any implied warranties of merchantability or fitness for a
+particular purpose. In no event will USGS be liable to you or to any
+third party for any direct, indirect, incidental, consequential,
+special, or exemplary damages or lost profits resulting from any use
+or misuse of these data. Acknowledgement of the U.S. Geological Survey
+would be appreciated in products derived from these data. Any user who
+modifies the data is obligated to describe the types of modifications
+they perform. User specifically agrees not to misrepresent the data,
+nor to imply that changes made were approved or endorsed by the
+USGS.</useconst>
+"
+
+[0] Danielson, J.J., and Gesch, D.B., 2011, Global multi-resolution
+    terrain elevation data 2010 (GMTED2010): U.S. Geological Survey
+    Open-File Report 2011–1073, 26p.
+    http://pubs.usgs.gov/of/2011/1073/pdf/of2011-1073.pdf

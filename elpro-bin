@@ -1,0 +1,23 @@
+#!/bin/sh
+#| -*- mode: scheme; coding: utf-8; -*-
+exec gosh -I. -- $0 "$@"
+|#
+(use elpro)
+(define z (dem-stack->xy->z*))
+(define polyline->3d (get-polyline->3d z))
+(define upsample-polyline->4d (get-upsample-polyline->4d z))
+(define sample-polyline->4d (get-sample-polyline->4d z))
+(define (help)
+  (print "Examples:")
+  (print "
+(z '(8.5 4) '(8.5 48))
+(polyline->3d '((8.5 48.5) (8.6 48.5)))
+(upsample-polyline->4d 'wgs84 '((8.5 48.5) (8.6 48.5)) 1000)
+(sample-polyline->4d 'wgs84 '((8.5 48.5) (8.6 48.5)) 3)
+(help)
+")
+  )
+
+(define (main args)
+  (help)
+  (read-eval-print-loop))

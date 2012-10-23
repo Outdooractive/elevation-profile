@@ -1,0 +1,4 @@
+Simple elevation profile (elpro) service similar to google's elevation
+service [1].
+
+[1] https://developers.google.com/maps/documentation/javascript/elevation

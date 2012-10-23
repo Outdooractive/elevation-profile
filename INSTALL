@@ -1,0 +1,65 @@
+-*- mode: org; coding: utf-8; -*-
+
+* build dependencies:
+  make
+  gauche-dev
+
+* additional make check dependencies:
+  unzip
+  gdal-bin
+
+* runtime dependencies:
+  gauche
+  gauche-c-wrapper
+  libgdal1-dev
+  g++
+  libgeographiclib-dev (>=1.6! [1])
+
+* additional dependencies for web service
+  apache2
+  libapache2-mod-fcgid
+  gauche-fastcgi [2]
+  gnuplot-nox (for svg output)
+
+* compile from source
+  run:
+  make
+  and
+  make install prefix=/usr sysconfdir=/etc
+
+* instructions for debian users:
+  debian users can also use my repo to get the source package or to
+  simply install the binary package from there
+
+** debian/squeeze
+   # as root
+   echo deb-src http://karme.de/debian squeeze main >> /etc/apt/sources.list
+   echo deb http://karme.de/debian squeeze main >> /etc/apt/sources.list
+   # somehow get my public key (maybe not as root)
+   gpg --keyserver hkp://keys.gnupg.net --recv-keys C282571A \
+   && gpg --armor --export C282571A | sudo apt-key add -
+   # install
+   apt-get update && apt-get install elevation-profile
+   # test fcgi (maybe do a "service apache2 restart" first)
+   wget -q -O - 'http://localhost/cgi-bin/elpro.fcgi?path=40,9' && echo
+
+** debian/wheezy
+   # as root
+   echo deb-src http://karme.de/debian wheezy main >> /etc/apt/sources.list
+   echo deb http://karme.de/debian wheezy main >> /etc/apt/sources.list
+   # somehow get my public key (maybe not as root)
+   gpg --keyserver hkp://keys.gnupg.net --recv-keys C282571A \
+   && gpg --armor --export C282571A | sudo apt-key add -
+   # install
+   apt-get update && apt-get install elevation-profile
+   # test fcgi (maybe do a "service apache2 restart" first)
+   wget -q -O - 'http://localhost/cgi-bin/elpro.fcgi?path=40,9' && echo
+   
+* References:
+  
+[1] debian squeeze users must backport
+  
+[2] debian users: not part of debian
+  get it here:
+  http://prdownloads.sourceforge.jp/gauche/18858/Gauche-fastcgi-0.1.3.tgz
+  or install from my repo
