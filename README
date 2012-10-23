@@ -1,4 +1,10 @@
 Simple elevation profile (elpro) service similar to google's elevation
 service [1].
 
+git repo at:
+http://karme.de/git/elevation-profile
+
+demo at:
+http://karme.de/elevation-profile/demo?path=48.5,9|48.5,9.1&upsample=100&format=svg
+
 [1] https://developers.google.com/maps/documentation/javascript/elevation
