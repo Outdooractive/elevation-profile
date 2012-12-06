@@ -1,6 +1,28 @@
-#!/bin/sh
-#| -*- mode: scheme; coding: utf-8; -*- |#
-:; exec gosh -I. -- $0 "$@"
+#!/bin/bash
+#| -*- mode: scheme; coding: utf-8; -*-
+USE_RUNTIME_COMPILE="$1"
+test -z "$USE_RUNTIME_COMPILE" || USE_RUNTIME_COMPILE="-Fuse-runtime-compile"
+# |#
+:; exec gosh -I. -I../runtime-compile -I../profile -I../gc-hack -uprofile $USE_RUNTIME_COMPILE -- $0 "$@"
+
+;;disable debug print
+;; (define-syntax debug-print
+;;   (syntax-rules ()
+;;     ((_ ?form)
+;;      ?form)))
+;; (let1 x debug-print 
+;;   (with-module gauche.vm.debugger (set! debug-print x)))
+
+;; (use gc-hack)
+;; (gc-set-warn-proc
+;;           (lambda(msg arg)
+;;             (with-output-to-port (current-error-port)
+;;               (lambda()
+;;                 (set! called #t)
+;;                 (print "SCHEME GC WARNING HANDLER HACK:\n" msg arg)
+;;                 (%vm-show-stack-trace (vm-get-stack-trace-lite))))))
+
+(use dem-gdal)
 (use gauche.test)
 (use rfc.http)
 (use gauche.process)
@@ -8,8 +30,6 @@
 (use gauche.collection)
 
 (test-start "dem-gdal")
-(use dem-gdal)
-(test-module 'dem-gdal)
 
 (define *test-files* '("N48E008.hgt" "N48E009.hgt"))
 (define *vrt-file* "all.vrt")
@@ -157,7 +177,7 @@
              0
              676)
        (map (compose round->exact
-                     (cut apply (dem->xy-project->z "epsg:4326" "gmted2010_mn30@480.tif" :next (lambda _ 0)) <>))
+                     (cute apply (dem->xy-project->z "epsg:4326" "gmted2010_mn30@480.tif" :next (lambda _ 0)) <>))
             '((0 -90) (0 -90.0001) (180.0001 -90.00001) (-180.0001 -90.00001) (360.0001 -90.00001)
               (0 90) (0 90.0001) (180 90) (180.0001 90) (720 90) (-720 90)
               (180 0) (181 0)
@@ -177,9 +197,9 @@
              0
              735)
        (map (compose round->exact
-                     (cut apply (dem-stack->xy->z "epsg:4326"
-                                                  `(("N48E008_utm.tif")
-                                                    ("gmted2010_mn30@480.tif" :next ,(lambda _ 0)))) <>))
+                     (cute apply (dem-stack->xy->z "epsg:4326"
+                                                   `(("N48E008_utm.tif")
+                                                     ("gmted2010_mn30@480.tif" :next ,(lambda _ 0)))) <>))
             '((0 -90) (0 -90.0001) (180.0001 -90.00001) (-180.0001 -90.00001) (360.0001 -90.00001)
               (0 90) (0 90.0001) (180 90) (180.0001 90) (720 90) (-720 90)
               (180 0) (181 0)

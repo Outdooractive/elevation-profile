@@ -48,6 +48,7 @@
   (use gauche.version)
   (use file.util)
   (use srfi-27)
+  ;; (use gauche.process) ;; only needed for assembly output
   (export compile-and-load
           cise-compile-and-load))
 
@@ -85,7 +86,7 @@
      (thunk dir)
      (guard (e
              [else
-              (eprint "rmdir " dir " failed") ;; todo
+              ;;(eprint "rmdir " dir " failed") ;; todo
               ])
             (sys-rmdir dir)))))
 
@@ -94,11 +95,11 @@
     (unwind-protect
      (begin
        ;; fake make to let emacs know we changed directory
-       (eprint #`"runtime-compile: Entering directory `,|name|'")
+       ;;(eprint #`"runtime-compile: Entering directory `,|name|'")
        (current-directory name)
        (thunk))
      (begin
-       (eprint #`"runtime-compile: Leaving directory `,|name|'")
+       ;;(eprint #`"runtime-compile: Leaving directory `,|name|'")
        (current-directory old-dir)))))
 
 (define (cat x)
@@ -167,7 +168,15 @@
                                 (not (null? (class-slot-ref c 'modules))))
                        (class-slot-set! c 'modules (list)))))
             (cgen-precompile scm-file :ext-initializer #t)
-            ;; (cat c-file)
+
+            ;;(cat #?=c-file)
+
+            ;; take a look at the assembly
+            ;;(run-process `(gcc -S -fverbose-asm -ggdb -dA ,(process-output->string "gauche-config -I") -O2 ,|c-file|) :wait #t)
+            ;;(cat #`",|new-mod|.s")
+            ;; another version
+            ;;(run-process `(gcc "-Wa,-adhln" -g -c -O2 -o /dev/null ,(process-output->string "gauche-config -I") ,(process-output->string "gauche-config --so-cflags") ,|c-file|) :wait #t)
+
             ;; compile .so
             (with-output-to-port (current-error-port)
               (lambda()

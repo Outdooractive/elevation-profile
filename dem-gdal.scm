@@ -51,6 +51,7 @@
   (use gauche.array)
   (use gauche.uvector)
   (use gauche.process)
+  (use runtime-compile)
   ;;(use sxml.adaptor)
   (export dem->xy->z   
           dem->xy-project->z
@@ -112,21 +113,394 @@
   transform-error?
   (pos transform-error-pos))
 
-(define (osr-transform from to)
-  (if (osr-is-same? from to)
-    identity
-    (let ((ct (OCTNewCoordinateTransformation from to))
-          (xa (make (c-array <c-double> 1)))
-          (ya (make (c-array <c-double> 1)))
-          (za (make (c-array <c-double> 1))))
-      (assert (not (null-ptr? ct)))
+(cond-expand
+ (use-runtime-compile
+  (compile-and-load
+   `((inline-stub
+      (declcode
+       (.include "gauche/uvector.h")
+       (.include "gdal/gdal.h")
+       (.include "gdal/ogr_srs_api.h")
+       "static ScmClass *osrn_transform_class = NULL;"
+       "/* stolen from cwcompile output */
+      static void cw_unbox(void *dest, ScmObj obj, size_t size)
+      {
+        static ScmObj bufferof_proc = NULL;
+        ScmObj buf;
+        if (!bufferof_proc) {
+          bufferof_proc = SCM_SYMBOL_VALUE(\"c-wrapper.c-ffi\", \"buffer-of\");
+        }
+        buf = Scm_ApplyRec(bufferof_proc, SCM_LIST1(obj));
+        memcpy(dest, SCM_UVECTOR_ELEMENTS(buf), size);
+      }"
+       )
+      
+      (define-cproc make-osrn-transform (fromp top)
+        (let* ((from::OGRSpatialReferenceH NULL)
+               (to::OGRSpatialReferenceH NULL))
+          (cw_unbox (& from) fromp (sizeof OGRSpatialReferenceH))
+          (cw_unbox (& to) top (sizeof OGRSpatialReferenceH))
+          (when (not from)
+            (Scm_Error "failed to set from"))
+          (when (not to)
+            (Scm_Error "failed to set to"))
+          (return (Scm_MakeForeignPointer osrn_transform_class (OCTNewCoordinateTransformation from to)))))
+
+      (define-cproc osrn-apply-transform (it x::<double> y::<double>)
+        (unless (SCM_XTYPEP it osrn_transform_class) (SCM_TYPE_ERROR it "<osrn:transform>"))
+        (let* ((t::OGRCoordinateTransformationH (SCM_FOREIGN_POINTER_REF OGRCoordinateTransformationH it))
+               (xr::double x)
+               (yr::double y)
+               (zr::double 0))
+          (when (not (OCTTransform t 1 (& xr) (& yr) (& zr)))
+            (Scm_Error "transform failed")) ;; todo: use Scm_Raise ?
+          (result (SCM_LIST3 (Scm_MakeFlonum xr)
+                             (Scm_MakeFlonum yr)
+                             (Scm_MakeFlonum zr)))))
+
+      (define-cfn osrn-transform-cleanup (h) ::void :static
+        (OCTDestroyCoordinateTransformation (SCM_FOREIGN_POINTER_REF OGRCoordinateTransformationH h)))
+      
+      (define-cfn osrn-transform-print (h p::ScmPort* c::ScmWriteContext*) ::void :static
+        (Scm_Printf p "#<osrn:transform @%p->%p>" h (SCM_FOREIGN_POINTER_REF OGRCoordinateTransformationH h)))
+
+      (define-cproc c-gdal-read-band-row!
+        (bandp nodata xsize::<int> ysize::<int> scanline::<f32vector> row::<int> start::<int> end::<int>)
+        (let* ((band::GDALRasterBandH NULL))
+          (cw_unbox (& band) bandp (sizeof GDALRasterBandH))
+          (unless (<= start end) (Scm_Error "(<= start end)")) ;; todo: c-level assert?!
+          (let* ((count::int (- end start)))
+            (unless (>= (SCM_UVECTOR_SIZE scanline) count) (Scm_Error "(>= (SCM_UVECTOR_SIZE scanline) count)"))
+            (Scm_F32VectorFill scanline NAN 0 (SCM_UVECTOR_SIZE scanline))
+            (cond [(and (> count 0)
+                        (>= row 0)
+                        (< row ysize))
+                   (let* ((rstart::int (?: (< start 0) 0 start))
+                          (rend::int   (?: (< end xsize) end xsize))
+                          (lfill::int (- rstart start))
+                          ;; (rfill (- end rend))
+                          (rcount::int (- rend rstart)))
+                     (when (and (> rcount 0)
+                                (not (== (GDALRasterIO band GF_Read rstart row rcount 1
+                                                       (+ (SCM_F32VECTOR_ELEMENTS scanline) lfill)
+                                                       rcount 1 GDT_Float32 0 0)
+                                         0)))
+                       (Scm_Error "todo"))
+                     (let* ((r::int 0)
+                            (i::int 0))
+                       ;; replace nodata with nan
+                       (unless (or (SCM_BOOLP nodata) (SCM_FLONUMP nodata))
+                         (Scm_Error "(or (SCM_BOOLP nodata) (SCM_FLONUMP nodata))"))
+                       (when (and (not (SCM_BOOLP nodata))
+                                  (SCM_FLONUMP nodata))
+                         (for [(set! i 0) (< i (SCM_UVECTOR_SIZE scanline)) (pre++ i)]
+                              (when (== (aref (SCM_F32VECTOR_ELEMENTS scanline) i) (SCM_FLONUM_VALUE nodata))
+                                (set! (aref (SCM_F32VECTOR_ELEMENTS scanline) i) NAN))))
+                       ;; count nan
+                       (for [(set! i 0) (< i (SCM_UVECTOR_SIZE scanline)) (pre++ i)]
+                            (when (isnan (aref (SCM_F32VECTOR_ELEMENTS scanline) i))
+                              (pre++ r)))
+                       (result (SCM_MAKE_INT r))))]
+                  [else
+                   (result (SCM_MAKE_INT (SCM_UVECTOR_SIZE scanline)))]))))
+
+      (initcode (= osrn_transform_class (Scm_MakeForeignPointerClass
+                                         (Scm_CurrentModule)
+                                         "<osrn:transform>" osrn-transform-print osrn-transform-cleanup
+                                         SCM_FOREIGN_POINTER_KEEP_IDENTITY)))
+      ))
+   '(make-osrn-transform osrn-apply-transform c-gdal-read-band-row!)
+   :libs (process-output->string "gdal-config --libs"))
+
+  (define (osr-transform from to)
+    (if (osr-is-same? from to)
+      identity
+      (let1 fp (make-osrn-transform from to)
+        (lambda(l)
+          (guard (e [else
+                     ;;#?=e
+                     (error <transform-error> :pos l)])
+                 (osrn-apply-transform fp (car l) (cadr l)))))))
+  (with-module gauche.array
+    (define (symbolic-array-mul a b) ; NxM * MxP => NxP
+      (let ([a-start (start-vector-of a)]
+            [a-end (end-vector-of a)]
+            [b-start (start-vector-of b)]
+            [b-end (end-vector-of b)])
+        (unless (= 2 (s32vector-length a-start) (s32vector-length b-start))
+          (error "array-mul matrices must be of rank 2"))
+        (let* ([a-start-row (s32vector-ref a-start 0)]
+               [a-end-row (s32vector-ref a-end 0)]
+               [a-start-col (s32vector-ref a-start 1)]
+               [a-end-col (s32vector-ref a-end 1)]
+               [b-start-col (s32vector-ref b-start 1)]
+               [b-end-col (s32vector-ref b-end 1)]
+               [n (- a-end-row a-start-row)]
+               [m (- a-end-col a-start-col)]
+               [p (- b-end-col b-start-col)]
+               [a-col-b-row-off (- a-start-col (s32vector-ref b-start 0))]
+               [res (make-minimal-backend-array (list a b) (shape 0 n 0 p))])
+          (unless (= m (- (s32vector-ref b-end 0) (s32vector-ref b-start 0)))
+            (errorf "dimension mismatch: can't mul shapes ~S and ~S"
+                    (array-shape a) (array-shape b)))
+          (do ([i a-start-row (+ i 1)])       ; for-each row of a
+              [(= i a-end-row) res]
+            (do ([k b-start-col (+ k 1)])     ; for-each col of b
+                [(= k b-end-col)]
+              (let1 tmp (list '+)
+                (do ([j a-start-col (+ j 1)]) ; for-each col of a & row of b
+                    [(= j a-end-col)]
+                  (append! tmp (list (list '* (array-ref a i j) (array-ref b (- j a-col-b-row-off) k)))))
+                (array-set! res (- i a-start-row) (- k b-start-col) tmp)))))))
+    (export symbolic-array-mul)
+    )
+
+  ;; todo:
+  ;; - gdal already should provide that, no?
+  (define (gdal-get-geotransform⁻¹ dataset)
+    (let* ((A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
+                                        (array (shape 0 3 0 3)
+                                               1.0 0.0 0.5
+                                               0.0 1.0 0.5
+                                               0.0 0.0 1.0))))
+           (sr (symbolic-array-mul A (array (shape 0 3 0 1) 'x 'y 1)))
+           (nf (let1 mod (compile-and-load
+                          `((inline-stub
+                             (define-cproc foo (x::<double> y::<double>)
+                               (return (SCM_LIST2
+                                        (Scm_MakeFlonum ,(array-ref sr 0 0))
+                                        (Scm_MakeFlonum ,(array-ref sr 1 0)))))))
+                          `())
+                 (global-variable-ref mod 'foo))))
+      ;;#?=(list (array-ref sr 0 0) (array-ref sr 1 0))
       (lambda(l)
-        (set! (ref xa 0) (ref l 0))
-        (set! (ref ya 0) (ref l 1))
-        (set! (ref za 0) (ref l 2 0))
-        (when (not (c-int->bool (OCTTransform ct 1 xa ya za)))
-          (error <transform-error> :pos l))
-        (list (ref xa 0) (ref ya 0) (ref za 0))))))
+        ;; (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
+        ;;   (list (array-ref r 0 0) (array-ref r 1 0))
+        (nf (ref l 0) (ref l 1))
+        )))
+
+  (define (get-gdal-read-band-row! band nodata)
+    (let ((xsize (GDALGetRasterBandXSize band))
+          (ysize (GDALGetRasterBandYSize band)))
+      (lambda(scanline row . args)
+        (let-optionals* args ((start 0)
+                              (end xsize))
+          (c-gdal-read-band-row! band nodata xsize ysize scanline row start end)))))
+
+  (compile-and-load
+   `((inline-stub
+      (define-cproc interp-cubic (u::<double> c0::<double> c1::<double> c2::<double> c3::<double>)
+        ::<number> ;; :fast-flonum :constant
+        (result (Scm_MakeFlonum (/ (+ (* u (+ (* u (+ (* u (+ c3 (* -3 c2) (* 3 c1) (- c0)))
+                                                      (- c3)
+                                                      (* 4 c2)
+                                                      (* -5 c1)
+                                                      (* 2 c0)))
+                                              c2
+                                              (- c0)))
+                                      (* 2 c1))
+                                   2))))))
+   '(interp-cubic))
+
+  (compile-and-load
+   `((inline-stub
+      (declcode
+       (.include "math.h"))
+      (define-cproc bbox-geo-wrap-2 (x::<double> y::<double> minx::<double> maxx::<double>)
+        (while 1
+          (cond [(< y -90)
+                 (+= x 180)
+                 (set! y (- -180 y))]
+                [(> y 90)
+                 (+= x 180)
+                 (set! y (- 180 y))]
+                [else
+                 (break)]))
+        ;; todo: improve
+        (while 1
+          (cond [(and (< x minx)
+                      (or (>= (- maxx minx) 360)
+                          (<= (+ x 360) maxx)))
+                 (+= x 360)]
+                [(and (> x maxx)
+                      (or (>= (- maxx minx) 360)
+                          (>= (- x 360) minx)))
+                 (-= x 360)]
+                [else
+                 (break)]))
+        (result (SCM_LIST2 (Scm_MakeFlonum x)
+                           (Scm_MakeFlonum y))))
+      (define-cproc geo-wrap-2 (x::<double> y::<double>)
+        (while 1
+          (cond [(< y -90)
+                 (+= x 180)
+                 (set! y (- -180 y))]
+                [(> y 90)
+                 (+= x 180)
+                 (set! y (- 180 y))]
+                [else
+                 (break)]))
+        (result (SCM_LIST2 (Scm_MakeFlonum (fmod x 360))
+                           (Scm_MakeFlonum y))))))
+   '(bbox-geo-wrap-2 geo-wrap-2))
+
+  (define (get-bbox-geo-wrap geobox)
+    (lambda(xy)
+      (bbox-geo-wrap-2 (car xy) (cadr xy) (ref* geobox 0 0) (ref* geobox 1 0))))
+
+  (define (geo-wrap xy)
+    (geo-wrap-2 (car xy) (cadr xy)))
+
+  ;; todo: not worth it?!
+  (compile-and-load
+   `((inline-stub
+      (declcode
+       (.include "math.h"))
+      (define-cproc raster-pos->4x4-box (l::<list>)
+        ;; todo: crap - see also gauche number.c how to do it
+        (unless (and (SCM_FLONUMP (SCM_CAR l)) (SCM_FLONUMP (SCM_CADR l)))
+          (Scm_Error "only flonum supported"))
+        (let* ((x::int (- (cast int (floor (SCM_FLONUM_VALUE (SCM_CAR l)))) 1))
+               (y::int (- (cast int (floor (SCM_FLONUM_VALUE (SCM_CADR l)))) 1)))
+          (result (SCM_LIST2
+                   (SCM_LIST2 (SCM_MAKE_INT x) (SCM_MAKE_INT y))
+                   (SCM_LIST2
+                    (SCM_MAKE_INT (+ x 4)) (SCM_MAKE_INT (+ y 4)))))))))
+   '(raster-pos->4x4-box)))
+
+ (else
+  (define (osr-transform from to)
+    (if (osr-is-same? from to)
+      identity
+      (let ((ct (OCTNewCoordinateTransformation from to))
+            (xa (make (c-array <c-double> 1)))
+            (ya (make (c-array <c-double> 1)))
+            (za (make (c-array <c-double> 1))))
+        (assert (not (null-ptr? ct)))
+        (lambda(l)
+          (set! (ref xa 0) (ref l 0))
+          (set! (ref ya 0) (ref l 1))
+          (set! (ref za 0) (ref l 2 0))
+          (when (not (c-int->bool (OCTTransform ct 1 xa ya za)))
+            (error <transform-error> :pos l))
+          (list (ref xa 0) (ref ya 0) (ref za 0))))))
+
+  ;; todo:
+  ;; - gdal already should provide that, no?
+  ;; - slow
+  (define (gdal-get-geotransform⁻¹ dataset)
+    (let1 A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
+                                      (array (shape 0 3 0 3)
+                                             1.0 0.0 0.5
+                                             0.0 1.0 0.5
+                                             0.0 0.0 1.0)))
+      (lambda(l)
+        (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
+          (list (array-ref r 0 0) (array-ref r 1 0))))))
+
+  (define (f32vector-replace! vec from to)
+    (let1 s (f32vector-length vec)
+      (dotimes (i s)
+        (when (= (f32vector-ref vec i) from)
+          (f32vector-set! vec i to))))
+    vec)
+  
+  (define (get-gdal-read-band-row! band nodata)
+    (let ((xsize (GDALGetRasterBandXSize band))
+          (ysize (GDALGetRasterBandYSize band)))
+      (lambda(scanline row . args)
+        (let-optionals* args ((start 0)
+                              (end xsize))
+          (assert (<= start end))
+          (let1 count (- end start)
+            (assert (>= (size-of scanline) count))
+            (f32vector-fill! scanline +nan.0)
+            (cond [(and (> count 0)
+                        (>= row 0)
+                        (< row ysize))
+                   (let ((rstart (max 0 start))
+                         (rend   (min end xsize)))
+                     (let ((lfill (- rstart start))
+                           ;; (rfill (- end rend))
+                           (rcount (- rend rstart)))
+                       (when (and (> rcount 0)
+                                  (not (zero? (GDALRasterIO band GF_Read rstart row rcount 1
+                                                            (c-ptr+ (cast (ptr <c-float>) scanline) lfill)
+                                                            rcount 1 GDT_Float32 0 0))))
+                         (error "todo"))
+                       (assert (or (boolean? nodata) (number? nodata)))
+                       ;; replace nodata with nan
+                       (when nodata
+                         (f32vector-replace! scanline nodata +nan.0))
+                       ;; count nan
+                       (let ((s (f32vector-length scanline))
+                             (r 0))
+                         (dotimes (i s)
+                           (when (nan? (f32vector-ref scanline i))
+                             (inc! r)))
+                         r)))]
+                  [else
+                   (f32vector-length scanline)]))))))
+  
+  ;; taken from grass (interp.c)
+  ;;     return (u * (u * (u * (c3 + -3 * c2 + 3 * c1 - c0) +
+  ;;	      (-c3 + 4 * c2 - 5 * c1 + 2 * c0) + (c2 - c0)) + 2 * c1) / 2;
+  (define (interp-cubic u c0 c1 c2 c3)
+    (/ (+ (* u (+ (* u (+ (* u (+ c3 (* -3 c2) (* 3 c1) (- c0)))
+                          (- c3)
+                          (* 4 c2)
+                          (* -5 c1)
+                          (* 2 c0)))
+                  c2
+                  (- c0)))
+          (* 2 c1))
+       2))
+
+  ;; todo: improve
+  (define (mod4 x m minx maxx)
+    (cond [(and (< x minx)
+                (or (>= (- maxx minx) m)
+                    (<= (+ x m) maxx)))
+           (mod4 (+ x m) m minx maxx)]
+          [(and (> x maxx)
+                (or (>= (- maxx minx) m)
+                    (>= (- x m) minx)))
+           (mod4 (- x m) m minx maxx)]
+          [else
+           x]))
+  
+  (define wrap-long-to (cut mod4 <> 360 <> <>))
+
+  ;; todo: improve / or maybe just clip?!
+  (define (wrap-lat x y . l)
+    (cond [(< y -90)
+           (apply wrap-lat (append (list (+ x 180) (- -180 y))
+                                   l))]
+          [(> y 90)
+           (apply wrap-lat (append (list (+ x 180) (- 180 y))
+                                   l))]
+          [else
+           (append (list x y) l)]))
+
+  (define (get-bbox-geo-wrap geobox)
+    (lambda(xy)
+      (let1 xy (apply wrap-lat xy)
+        (list (wrap-long-to (car xy)
+                            (ref* geobox 0 0)
+                            (ref* geobox 1 0))
+              (cadr xy)))))
+
+  (define (geo-wrap xy)
+    (let1 xy (apply wrap-lat xy)
+      ;; note: (fmod (car xy) 360) can't be expressed using wrap-long-to :(
+      (list (fmod (car xy) 360) 
+            (cadr xy))))
+
+  (define (raster-pos->4x4-box raster-pos)
+    (let1 tl (map (lambda(x) (- (floor->exact x) 1)) raster-pos)
+      (list tl (map (cut + <> 4) tl))))
+
+  ))
 
 (define (osr-is-geographic? osr)
   (let1 r (c-int->bool (OSRIsGeographic osr))
@@ -161,22 +535,10 @@
                                (map (cut ref m <>) '(4 5 3))
                                '(0.0 0.0 1.0))))))
 
-;; todo:
-;; - gdal already should provide that, no?
-;; - slow
-(define (gdal-get-geotransform⁻¹ dataset)
-  (let ((A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
-                                     (array (shape 0 3 0 3)
-                                            1.0 0.0 0.5
-                                            0.0 1.0 0.5
-                                            0.0 0.0 1.0)))))
-    (lambda(l)
-      (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
-        (list (array-ref r 0 0) (array-ref r 1 0))))))
 
 ;; todo:
 ;; - gdal already should provide that, no?
-;; - slow
+;; - slow, but typically not called very often 
 (define (get-geotransform dataset)
   (let ((A (array-mul (gdal-get-geotransform-matrix dataset)
                       (array (shape 0 3 0 3)
@@ -214,80 +576,8 @@
     (and (c-int->bool gotNoData)
          (GDALGetRasterNoDataValue hband (ptr gotNoData)))))
 
-(define (gdal-read-band-row band row . args)
-  (let-optionals* args ((start 0)
-                        (end (GDALGetRasterBandXSize band)))
-    (assert (<= start end))
-    (let1 count (- end start)
-      (cond [(and (> count 0)
-                  (>= row 0)
-                  (< row (GDALGetRasterBandYSize band)))
-             (let ((rstart (max 0 start))
-                   (rend   (min end (GDALGetRasterBandXSize band))))
-               (let ((lfill (- rstart start))
-                     ;; (rfill (- end rend))
-                     (rcount (- rend rstart)))
-                 (let1 scanline (make-f32vector count +nan.0)
-                   ;; todo: just return #f if rcount is zero?
-                   (when (and (> rcount 0)
-                              (not (zero? (GDALRasterIO band GF_Read rstart row rcount 1 (c-ptr+ (cast (ptr <c-float>) scanline) lfill) rcount 1 GDT_Float32 0 0))))
-                     (error "todo"))
-                   scanline)))]
-            [else
-             ;; todo: just return #f ?
-             (make-f32vector count +nan.0)]))))
-
-;; note: not used at the moment
-;; todo: sometimes first and last column are the same
-;; (in this case we would have to ignore the last column)
-;; (define (gdal-read-band-row-wrap band row start end)
-;;   (assert (<= start end))
-;;   (let ((count (- end start))
-;;         (xsize (GDALGetRasterBandXSize band)))
-;;     (cond [(and (> count 0)
-;;                 (>= row 0)
-;;                 (< row (GDALGetRasterBandYSize band)))
-;;            (let ((rstart (modulo start xsize))
-;;                  (rend   (modulo end xsize))
-;;                  (scanline (make-f32vector count +nan.0)))
-;;              (cond [(< rstart rend)
-;;                     (assert (= count (- rend rstart)))
-;;                     (when (not (zero? (GDALRasterIO band GF_Read rstart row count 1 scanline count 1 GDT_Float32 0 0)))
-;;                       (error "todo")
-;;                       scanline)]
-;;                    [else
-;;                     ;; wrap-around => join 2 seperate parts
-;;                     (let1 c1 (- xsize rstart)
-;;                       (assert (< c1 count))
-;;                       (when (not (zero? (GDALRasterIO band GF_Read rstart row c1 1 scanline c1 1 GDT_Float32 0 0)))
-;;                         (error "todo"))
-;;                       (let1 c2 rend
-;;                         (assert (< c2 count))
-;;                         (when (not (zero? (GDALRasterIO band GF_Read rstart row c2 1 (c-ptr+ (cast (ptr <c-float>) scanline) c1) c2 1 GDT_Float32 0 0)))
-;;                           (error "todo"))))
-;;                     scanline]))]
-;;           [else
-;;            ;; todo: wrap around in y direction?!
-;;            (make-f32vector count +nan.0)])))
-
-;; taken from grass (interp.c)
-;;     return (u * (u * (u * (c3 + -3 * c2 + 3 * c1 - c0) +
-;;	      (-c3 + 4 * c2 - 5 * c1 + 2 * c0) + (c2 - c0)) + 2 * c1) / 2;
-(define (interp-cubic u c0 c1 c2 c3)
-  (/ (+ (* u (+ (* u (+ (* u (+ c3 (* -3 c2) (* 3 c1) (- c0)))
-                        (- c3)
-                        (* 4 c2)
-                        (* -5 c1)
-                        (* 2 c0)))
-                c2
-                (- c0)))
-        (* 2 c1))
-     2))
-
 (define (interp-linear u c0 c1)
   (+ (* u (- c1 c0)) c0))
-
-(define (range s e) (iota (- e s) s))
 
 (define (bi-interp u v f rows)
   (apply f
@@ -302,13 +592,11 @@
   (assert (= (size-of rows) 4))
   (bi-interp u v interp-cubic rows))
 
+;; (benchmark 10000 (lambda _ (interp-bicubic 0.2 0.2 '(#f32(0 1 0 0) #f32(0 2 0 0)#f32(0 0 0 0)#f32(0 0 0 0)))))
+
 (define (interp-bilinear u v rows)
   (assert (= (size-of rows) 2))
   (bi-interp u v interp-linear rows))
-
-(define (raster-pos->4x4-box raster-pos)
-  (let1 tl (map (lambda(x) (- (floor->exact x) 1)) raster-pos)
-    (list tl (map (cut + <> 4) tl))))
 
 (define (raster-pos->2x2-box raster-pos)
   (assert (list? raster-pos))
@@ -333,46 +621,6 @@
             [else
              #f]))))
 
-(define (f32vector-replace vec from to)
-  (map-to <f32vector> (lambda(x) (if (= x from) to
-                                     x))
-          vec))
-
-(define (p-fmod x y) (let1 r (fmod x y) (if (< r 0) (+ r y) r)))
-
-;; wrap longitude to [-180,180[
-(define (wrap-long x)
-  (let1 r (p-fmod x 360.0)
-    (if (>= r 180.0)
-      (- r 360.0)
-      r)))
-
-;; todo: improve
-(define (mod4 x m minx maxx)
-  (cond [(and (< x minx)
-              (or (>= (- maxx minx) m)
-                  (<= (+ x m) maxx)))
-         (mod4 (+ x m) m minx maxx)]
-        [(and (> x maxx)
-              (or (>= (- maxx minx) m)
-                  (>= (- x m) minx)))
-         (mod4 (- x m) m minx maxx)]
-        [else
-         x]))
-  
-(define wrap-long-to (cut mod4 <> 360 <> <>))
-
-;; todo: improve / or maybe just clip?!
-(define (wrap-lat x y . l)
-  (cond [(< y -90)
-         (apply wrap-lat (append (list (+ x 180) (- -180 y))
-                                 l))]
-        [(> y 90)
-         (apply wrap-lat (append (list (+ x 180) (- 180 y))
-                                 l))]
-        [else
-         (append (list x y) l)]))
-
 (define (gdal-raster-size dataset)
   (map x->number (list (GDALGetRasterXSize dataset) (GDALGetRasterYSize dataset))))
 
@@ -390,11 +638,13 @@
                   ly))))
       (list (permute l2 '(0 2))
             (permute l2 '(1 3))))))
-      
+
 (define (nan-to-#f n)
   (if (nan? n)
     #f
     n))
+
+(define (range s e) (iota (- e s) s))
 
 ;; return function to get z value at position x y
 ;; (using coordinate system described by projection)
@@ -405,117 +655,117 @@
                       (interpolation 'bi-cubic)
                       (band 1))
     (let* ((dataset (gdal-open-dataset name))
-           (band (gdal-open-band dataset band))
-           (width (GDALGetRasterBandXSize band))
-           (height (GDALGetRasterBandYSize band))
-           (osr (osr-from-dataset dataset))
-           (wrap (if (osr-is-geographic? osr)
-                   (let1 geobox (gdal-geographic-bbox dataset)
-                     (lambda(xy)
-                       (let1 xy (apply wrap-lat xy)
-                         (list (wrap-long-to (car xy)
-                                             (ref* geobox 0 0)
-                                             (ref* geobox 1 0))
-                               (cadr xy)))))
-                   (lambda(xy)
-                     (let1 xy (apply wrap-lat xy)
-                       (list (fmod (car xy) 360)
-                             (cadr xy))))))
-           (xy->z (lambda(fi get-box)
-                    (let ((rasterpos (apply compose
-                                            (reverse ;; just for readability
-                                             (filter (lambda(f) (not (eq? f identity)))
-                                                        (list
-                                                         (if (not (string-null? projection))
-                                                           (osr-transform (osr-from-user-input projection)
-                                                                          (OSRCloneGeogCS osr))
-                                                           identity)
-                                                         wrap
-                                                         (gdal-get-projection dataset)
-                                                         (gdal-get-geotransform⁻¹ dataset))))))
-                          ;; todo: only what I want if projection is a geographic cs?
-                          (rasterpos⁻¹ (apply compose
-                                              (reverse
+           (band (gdal-open-band dataset band)))
+      (let ((width (GDALGetRasterBandXSize band))
+            (height (GDALGetRasterBandYSize band))
+            (osr (osr-from-dataset dataset)))
+        (let1 xy->z (lambda(fi get-box box-width box-height)
+                      (let ((rasterpos (apply compose
+                                              (reverse ;; just for readability
                                                (filter (lambda(f) (not (eq? f identity)))
                                                        (list
-                                                        (get-geotransform dataset)
-                                                        (gdal-get-projection⁻¹ dataset)
                                                         (if (not (string-null? projection))
-                                                          (osr-transform (OSRCloneGeogCS osr)
-                                                                         (osr-from-user-input projection))
+                                                          (osr-transform (osr-from-user-input projection)
+                                                                         (OSRCloneGeogCS osr))
                                                           identity)
-                                                        (cut subseq <> 0 2))))))
-                          (read-row (let1 r (cut gdal-read-band-row band <...>)
-                                      (if (gdal-band-nodata band)
-                                        (compose (cut f32vector-replace <> (gdal-band-nodata band) +nan.0)
-                                                 r)
-                                        r))))
-                      (let ((read-box
-                             ;; todo: if dataset is geographic and grid alignment is fine we could
-                             ;; support raster wrap-around
-                             ;; s.a. gdal-read-band-row-wrap
-                             (lambda(box)
-                               (map (lambda(y)
-                                      (read-row y (caar box) (caadr box)))
-                                    (range (cadar box) (cadadr box))))))
-                        (lambda(x y)
-                          (guard (e [(transform-error? e)
-                                     ;; todo: maybe not what i want!
-                                     ;; #?=(list e (transform-error-pos e) x y)
-                                     (next x y)])
-                                 (let* ((rp (rasterpos (list x y)))
-                                        (box (get-box rp)))
-                                   ;; bbox test
-                                   (if (or (<= (caadr box) 0)  (>= (caar box) width)
-                                           (<= (cadadr box) 0) (>= (cadar box) height))
-                                     (next x y)
-                                     (let ((uv (raster-pos->uv rp))
-                                           (rows (read-box box)))
-                                       (cond [(every (lambda(r)
-                                                       (every nan? (f32vector->list r)))
-                                                     rows)
-                                              ;; all nan
-                                              #?="all nan!"
-                                              (next x y)]
-                                             [else
-                                              ;; try to replace nan
-                                              (call/cc
-                                               (lambda(break)
-                                                 (for-each-with-index
-                                                  (lambda(ry r)
-                                                    (for-each-with-index
-                                                     (lambda(rx v)
-                                                       (when (nan? v)
-                                                         (receive (cx cy)
-                                                             (apply values
-                                                                    (rasterpos⁻¹ (list (+ (caar box) rx)
-                                                                                       (+ (cadar box) ry))))
-                                                           (if-let1 nv
-                                                               (or (and (osr-is-geographic? osr)
-                                                                        (let* ((xy (lambda(x y)
-                                                                                     ;; todo: only allow close match / or interpolate?!
-                                                                                     ;; (but then i could use the offset stack ...)
-                                                                                     (let ((x (round->exact x))
-                                                                                           (y (round->exact y)))
-                                                                                       (ref (read-row y x (+ x 1)) 0))))
-                                                                               (p (lambda l
-                                                                                    (nan-to-#f (apply xy (rasterpos l))))))
-                                                                          (or (p (+ cx 360.0) cy)
-                                                                              (p (- cx 360.0) cy)
-                                                                              (and (or (> cy 90.0) (< cy -90.0))
-                                                                                   (p cx cy)))))
-                                                                   (nan-to-#f (next cx cy)))
-                                                             (set! (ref r rx) nv)
-                                                             (break (next x y))))))
-                                                     r))
-                                                  rows)
-                                                 (assert (not (any (cut find nan? <>) rows)))
-                                                 (fi (car uv) (cadr uv) rows)))])))))))))))
-      (case interpolation
-        ((bi-cubic)  (xy->z interp-bicubic raster-pos->4x4-box))
-        ((bi-linear) (xy->z interp-bilinear raster-pos->2x2-box))
-        ((nearest)   (xy->z (lambda(u v rows) (ref* rows 0 0)) raster-pos->1x1-box))
-        (else (error "Unknown interpolation:" interpolation))))))
+                                                        (if (osr-is-geographic? osr)
+                                                          ;; todo: at the moment we can only get the
+                                                          ;; geographic bbox if the dataset osr is
+                                                          ;; geographic
+                                                          (get-bbox-geo-wrap (gdal-geographic-bbox dataset))
+                                                          ;; note: input always geographic!
+                                                          geo-wrap)
+                                                        (gdal-get-projection dataset)
+                                                        (gdal-get-geotransform⁻¹ dataset))))))
+                            ;; todo:
+                            ;; - only what I want if projection is a geographic cs?
+                            ;; - slow, but typically not called very often
+                            (rasterpos⁻¹ (apply compose
+                                                (reverse
+                                                 (filter (lambda(f) (not (eq? f identity)))
+                                                         (list
+                                                          (get-geotransform dataset)
+                                                          (gdal-get-projection⁻¹ dataset)
+                                                          (if (not (string-null? projection))
+                                                            (osr-transform (OSRCloneGeogCS osr)
+                                                                           (osr-from-user-input projection))
+                                                            identity)
+                                                          (cut subseq <> 0 2))))))
+                            (read-row! (get-gdal-read-band-row! band (gdal-band-nodata band)))
+                            (rows (map (lambda(y) (make-f32vector box-width)) (iota box-height))))
+                        (let ((read-row (lambda(y xs xe)
+                                          (let1 row (make-f32vector (- xe xs))
+                                            (read-row! row y xs xe)
+                                            row)))
+                              (read-box! (lambda(box)
+                                           (let ((start (caar box))
+                                                 (end   (caadr box)))
+                                             (apply +
+                                                    (map-with-index (lambda(idx y)
+                                                                      (read-row! (ref rows idx) y start end))
+                                                                    (range (cadar box) (cadadr box))))))))
+                          (lambda(x y)
+                            (guard (e [(transform-error? e)
+                                       ;; todo: maybe not what i want!
+                                       ;; #?=(list e (transform-error-pos e) x y)
+                                       (next x y)])
+                                   (let* ((rp (rasterpos (list x y)))
+                                          (box (get-box rp)))
+                                     ;; bbox test
+                                     (if (or (<= (caadr box) 0)  (>= (caar box) width)
+                                             (<= (cadadr box) 0) (>= (cadar box) height))
+                                       (next x y)
+                                       (let* ((uv (raster-pos->uv rp))
+                                              (nans (read-box! box)))
+                                         (cond [(= nans (* box-width box-height))
+                                                ;; (every (lambda(r)
+                                                ;;          (every nan? (f32vector->list r)))
+                                                ;;        rows)
+                                                ;; all nan
+                                                ;; #?="all nan!"
+                                                (next x y)]
+                                               [(> nans 0)
+                                                ;; try to replace nan
+                                                (call/cc
+                                                 (lambda(break)
+                                                   (for-each-with-index
+                                                    (lambda(ry r)
+                                                      (for-each-with-index
+                                                       (lambda(rx v)
+                                                         (when (nan? v)
+                                                           (receive (cx cy)
+                                                               (apply values
+                                                                      (rasterpos⁻¹ (list (+ (caar box) rx)
+                                                                                         (+ (cadar box) ry))))
+                                                             (if-let1 nv
+                                                                 (or (and (osr-is-geographic? osr)
+                                                                          (let* ((xy (lambda(x y)
+                                                                                       ;; todo: only allow close match / or interpolate?!
+                                                                                       ;; (but then i could use the offset stack ...)
+                                                                                       (let ((x (round->exact x))
+                                                                                             (y (round->exact y)))
+                                                                                         (ref (read-row y x (+ x 1)) 0))))
+                                                                                 (p (lambda l
+                                                                                      (nan-to-#f (apply xy (rasterpos l))))))
+                                                                            (or (p (+ cx 360.0) cy)
+                                                                                (p (- cx 360.0) cy)
+                                                                                (and (or (> cy 90.0) (< cy -90.0))
+                                                                                     (p cx cy)))))
+                                                                     (nan-to-#f (next cx cy)))
+                                                               (set! (ref r rx) nv)
+                                                               (break (next x y))))))
+                                                       r))
+                                                    rows)
+                                                   ;; (assert (not (any (cut find nan? <>) rows)))
+                                                   (fi (car uv) (cadr uv) rows)))]
+                                               [else
+                                                (assert (zero? nans))
+                                                (fi (car uv) (cadr uv) rows)])))))))))
+          (case interpolation
+            ((bi-cubic)  (xy->z interp-bicubic raster-pos->4x4-box 4 4))
+            ((bi-linear) (xy->z interp-bilinear raster-pos->2x2-box 2 2))
+            ((nearest)   (xy->z (lambda(u v rows) (ref* rows 0 0)) raster-pos->1x1-box 1 1))
+            (else (error "Unknown interpolation:" interpolation))))))))
 
 ;; return function to get z value at position x y (using coordinate system of the dataset)
 (define (dem->xy->z name . args)
@@ -524,7 +774,7 @@
 (define (keyword-exists? key kv-list)
   (or (get-keyword key kv-list #f)
       (not (equal? 1 (get-keyword key kv-list 1)))))
-  
+
 (define (dem-stack->xy->z projection dem-stack)
   (let1 l (reverse dem-stack)
     (fold (lambda(n o)
