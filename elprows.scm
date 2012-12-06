@@ -13,7 +13,7 @@
 (select-module elprows)
 
 (define (create-context config)
-  (let1 get-z (apply dem-stack->xy->z* #?=config)
+  (let1 get-z (apply dem-stack->xy->z* config)
     (alist->hash-table
      `((get-z . ,get-z)
        (polyline->3d . ,(get-polyline->3d get-z))
@@ -42,7 +42,7 @@
   (list (cgi-header :content-type "image/svg+xml")
         (with-output-to-string
           (lambda()
-            #?=(current-output-port)
+            (current-output-port)
             (svg-plot (list (map (cut permute <> '(3 2)) pl)))))))
 
 (define (points->sxml pl)
