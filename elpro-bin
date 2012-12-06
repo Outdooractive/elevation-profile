@@ -1,6 +1,6 @@
 #!/bin/sh
 #| -*- mode: scheme; coding: utf-8; -*-
-exec gosh -I. -- $0 "$@"
+exec gosh -Fuse-runtime-compile -I. -- $0 "$@"
 |#
 (use elpro)
 (define z (dem-stack->xy->z*))
