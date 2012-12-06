@@ -49,7 +49,7 @@
   
 (define (default-dem-stack)
   (map (lambda(l)
-         (if #?=(keyword-exists? :next (cdr l))
+         (if (keyword-exists? :next (cdr l))
              ;; replace
              (let1 ov (get-keyword :next (cdr l))
                (cons (car l) (append
