@@ -2,7 +2,7 @@
 #| -*- mode: scheme; coding: utf-8; -*-
 PATH=$PATH:/usr/bin
 export PATH
-exec gosh -I. -- $0 "$@"
+exec gosh -Fuse-runtime-compile -I. -- $0 "$@"
 |#
 
 (use elprows)
