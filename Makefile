@@ -69,6 +69,7 @@ dist:
 
 check:
 	./test-dem-gdal.scm
+	./test-dem-gdal.scm -use-runtime-compile
 
 clean:
 	-rm -vf lores.tif N48E00* all.vrt*
