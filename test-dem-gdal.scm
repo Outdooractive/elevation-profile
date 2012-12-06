@@ -3,7 +3,7 @@
 USE_RUNTIME_COMPILE="$1"
 test -z "$USE_RUNTIME_COMPILE" || USE_RUNTIME_COMPILE="-Fuse-runtime-compile"
 # |#
-:; exec gosh -I. -I../runtime-compile -I../profile -I../gc-hack -uprofile $USE_RUNTIME_COMPILE -- $0 "$@"
+:; exec gosh -I. $USE_RUNTIME_COMPILE -- $0 "$@"
 
 ;;disable debug print
 ;; (define-syntax debug-print
