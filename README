@@ -1,10 +1,25 @@
 Simple elevation profile (elpro) service similar to google's elevation
 service [1].
 
-git repo at:
-http://karme.de/git/elevation-profile
+Demo installation using freeDEM [2] data:
 
-demo at:
 http://karme.de/elevation-profile/demo?path=48.5,9|48.5,9.1&upsample=100&format=svg
 
+(additional) features:
+
+- open source
+
+- seamless stacking of multiple DEMs (it is really simple to add
+  another DEM dataset if the format is supported by gdal [3])
+
+- upsample polyline (keeping original input points and inserting
+  equidistant additional points if needed)
+
+- wgs84 spheroid distance calculations
+
+git repository at:
+http://karme.de/git/elevation-profile
+
 [1] https://developers.google.com/maps/documentation/javascript/elevation
+[2] http://karme.de/freedem
+[3] http://www.gdal.org/formats_list.html
