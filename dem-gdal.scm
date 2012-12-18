@@ -114,7 +114,140 @@
   (pos transform-error-pos))
 
 (cond-expand
- (use-runtime-compile
+ (no-runtime-compile
+  (define (osr-transform from to)
+    (if (osr-is-same? from to)
+      identity
+      (let ((ct (OCTNewCoordinateTransformation from to))
+            (xa (make (c-array <c-double> 1)))
+            (ya (make (c-array <c-double> 1)))
+            (za (make (c-array <c-double> 1))))
+        (assert (not (null-ptr? ct)))
+        (lambda(l)
+          (set! (ref xa 0) (ref l 0))
+          (set! (ref ya 0) (ref l 1))
+          (set! (ref za 0) (ref l 2 0))
+          (when (not (c-int->bool (OCTTransform ct 1 xa ya za)))
+            (error <transform-error> :pos l))
+          (list (ref xa 0) (ref ya 0) (ref za 0))))))
+
+  ;; todo:
+  ;; - gdal already should provide that, no?
+  ;; - slow
+  (define (gdal-get-geotransform⁻¹ dataset)
+    (let1 A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
+                                      (array (shape 0 3 0 3)
+                                             1.0 0.0 0.5
+                                             0.0 1.0 0.5
+                                             0.0 0.0 1.0)))
+      (lambda(l)
+        (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
+          (list (array-ref r 0 0) (array-ref r 1 0))))))
+
+  (define (f32vector-replace! vec from to)
+    (let1 s (f32vector-length vec)
+      (dotimes (i s)
+        (when (= (f32vector-ref vec i) from)
+          (f32vector-set! vec i to))))
+    vec)
+
+  (define (get-gdal-read-band-row! band nodata)
+    (let ((xsize (GDALGetRasterBandXSize band))
+          (ysize (GDALGetRasterBandYSize band)))
+      (lambda(scanline row . args)
+        (let-optionals* args ((start 0)
+                              (end xsize))
+          (assert (<= start end))
+          (let1 count (- end start)
+            (assert (>= (size-of scanline) count))
+            (f32vector-fill! scanline +nan.0)
+            (cond [(and (> count 0)
+                        (>= row 0)
+                        (< row ysize))
+                   (let ((rstart (max 0 start))
+                         (rend   (min end xsize)))
+                     (let ((lfill (- rstart start))
+                           ;; (rfill (- end rend))
+                           (rcount (- rend rstart)))
+                       (when (and (> rcount 0)
+                                  (not (zero? (GDALRasterIO band GF_Read rstart row rcount 1
+                                                            (c-ptr+ (cast (ptr <c-float>) scanline) lfill)
+                                                            rcount 1 GDT_Float32 0 0))))
+                         (error "todo"))
+                       (assert (or (boolean? nodata) (number? nodata)))
+                       ;; replace nodata with nan
+                       (when nodata
+                         (f32vector-replace! scanline nodata +nan.0))
+                       ;; count nan
+                       (let ((s (f32vector-length scanline))
+                             (r 0))
+                         (dotimes (i s)
+                           (when (nan? (f32vector-ref scanline i))
+                             (inc! r)))
+                         r)))]
+                  [else
+                   (f32vector-length scanline)]))))))
+
+  ;; taken from grass (interp.c)
+  ;;     return (u * (u * (u * (c3 + -3 * c2 + 3 * c1 - c0) +
+  ;;	      (-c3 + 4 * c2 - 5 * c1 + 2 * c0) + (c2 - c0)) + 2 * c1) / 2;
+  (define (interp-cubic u c0 c1 c2 c3)
+    (/ (+ (* u (+ (* u (+ (* u (+ c3 (* -3 c2) (* 3 c1) (- c0)))
+                          (- c3)
+                          (* 4 c2)
+                          (* -5 c1)
+                          (* 2 c0)))
+                  c2
+                  (- c0)))
+          (* 2 c1))
+       2))
+
+  ;; todo: improve
+  (define (mod4 x m minx maxx)
+    (cond [(and (< x minx)
+                (or (>= (- maxx minx) m)
+                    (<= (+ x m) maxx)))
+           (mod4 (+ x m) m minx maxx)]
+          [(and (> x maxx)
+                (or (>= (- maxx minx) m)
+                    (>= (- x m) minx)))
+           (mod4 (- x m) m minx maxx)]
+          [else
+           x]))
+
+  (define wrap-long-to (cut mod4 <> 360 <> <>))
+
+  ;; todo: improve / or maybe just clip?!
+  (define (wrap-lat x y . l)
+    (cond [(< y -90)
+           (apply wrap-lat (append (list (+ x 180) (- -180 y))
+                                   l))]
+          [(> y 90)
+           (apply wrap-lat (append (list (+ x 180) (- 180 y))
+                                   l))]
+          [else
+           (append (list x y) l)]))
+
+  (define (get-bbox-geo-wrap geobox)
+    (lambda(xy)
+      (let1 xy (apply wrap-lat xy)
+        (list (wrap-long-to (car xy)
+                            (ref* geobox 0 0)
+                            (ref* geobox 1 0))
+              (cadr xy)))))
+
+  (define (geo-wrap xy)
+    (let1 xy (apply wrap-lat xy)
+      ;; note: (fmod (car xy) 360) can't be expressed using wrap-long-to :(
+      (list (fmod (car xy) 360)
+            (cadr xy))))
+
+  (define (raster-pos->4x4-box raster-pos)
+    (let1 tl (map (lambda(x) (- (floor->exact x) 1)) raster-pos)
+      (list tl (map (cut + <> 4) tl))))
+
+  )
+ (else
   (compile-and-load
    `((inline-stub
       (declcode
@@ -366,140 +499,7 @@
                    (SCM_LIST2 (SCM_MAKE_INT x) (SCM_MAKE_INT y))
                    (SCM_LIST2
                     (SCM_MAKE_INT (+ x 4)) (SCM_MAKE_INT (+ y 4)))))))))
-   '(raster-pos->4x4-box)))
-
- (else
-  (define (osr-transform from to)
-    (if (osr-is-same? from to)
-      identity
-      (let ((ct (OCTNewCoordinateTransformation from to))
-            (xa (make (c-array <c-double> 1)))
-            (ya (make (c-array <c-double> 1)))
-            (za (make (c-array <c-double> 1))))
-        (assert (not (null-ptr? ct)))
-        (lambda(l)
-          (set! (ref xa 0) (ref l 0))
-          (set! (ref ya 0) (ref l 1))
-          (set! (ref za 0) (ref l 2 0))
-          (when (not (c-int->bool (OCTTransform ct 1 xa ya za)))
-            (error <transform-error> :pos l))
-          (list (ref xa 0) (ref ya 0) (ref za 0))))))
-
-  ;; todo:
-  ;; - gdal already should provide that, no?
-  ;; - slow
-  (define (gdal-get-geotransform⁻¹ dataset)
-    (let1 A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
-                                      (array (shape 0 3 0 3)
-                                             1.0 0.0 0.5
-                                             0.0 1.0 0.5
-                                             0.0 0.0 1.0)))
-      (lambda(l)
-        (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
-          (list (array-ref r 0 0) (array-ref r 1 0))))))
-
-  (define (f32vector-replace! vec from to)
-    (let1 s (f32vector-length vec)
-      (dotimes (i s)
-        (when (= (f32vector-ref vec i) from)
-          (f32vector-set! vec i to))))
-    vec)
-  
-  (define (get-gdal-read-band-row! band nodata)
-    (let ((xsize (GDALGetRasterBandXSize band))
-          (ysize (GDALGetRasterBandYSize band)))
-      (lambda(scanline row . args)
-        (let-optionals* args ((start 0)
-                              (end xsize))
-          (assert (<= start end))
-          (let1 count (- end start)
-            (assert (>= (size-of scanline) count))
-            (f32vector-fill! scanline +nan.0)
-            (cond [(and (> count 0)
-                        (>= row 0)
-                        (< row ysize))
-                   (let ((rstart (max 0 start))
-                         (rend   (min end xsize)))
-                     (let ((lfill (- rstart start))
-                           ;; (rfill (- end rend))
-                           (rcount (- rend rstart)))
-                       (when (and (> rcount 0)
-                                  (not (zero? (GDALRasterIO band GF_Read rstart row rcount 1
-                                                            (c-ptr+ (cast (ptr <c-float>) scanline) lfill)
-                                                            rcount 1 GDT_Float32 0 0))))
-                         (error "todo"))
-                       (assert (or (boolean? nodata) (number? nodata)))
-                       ;; replace nodata with nan
-                       (when nodata
-                         (f32vector-replace! scanline nodata +nan.0))
-                       ;; count nan
-                       (let ((s (f32vector-length scanline))
-                             (r 0))
-                         (dotimes (i s)
-                           (when (nan? (f32vector-ref scanline i))
-                             (inc! r)))
-                         r)))]
-                  [else
-                   (f32vector-length scanline)]))))))
-  
-  ;; taken from grass (interp.c)
-  ;;     return (u * (u * (u * (c3 + -3 * c2 + 3 * c1 - c0) +
-  ;;	      (-c3 + 4 * c2 - 5 * c1 + 2 * c0) + (c2 - c0)) + 2 * c1) / 2;
-  (define (interp-cubic u c0 c1 c2 c3)
-    (/ (+ (* u (+ (* u (+ (* u (+ c3 (* -3 c2) (* 3 c1) (- c0)))
-                          (- c3)
-                          (* 4 c2)
-                          (* -5 c1)
-                          (* 2 c0)))
-                  c2
-                  (- c0)))
-          (* 2 c1))
-       2))
-
-  ;; todo: improve
-  (define (mod4 x m minx maxx)
-    (cond [(and (< x minx)
-                (or (>= (- maxx minx) m)
-                    (<= (+ x m) maxx)))
-           (mod4 (+ x m) m minx maxx)]
-          [(and (> x maxx)
-                (or (>= (- maxx minx) m)
-                    (>= (- x m) minx)))
-           (mod4 (- x m) m minx maxx)]
-          [else
-           x]))
-  
-  (define wrap-long-to (cut mod4 <> 360 <> <>))
-
-  ;; todo: improve / or maybe just clip?!
-  (define (wrap-lat x y . l)
-    (cond [(< y -90)
-           (apply wrap-lat (append (list (+ x 180) (- -180 y))
-                                   l))]
-          [(> y 90)
-           (apply wrap-lat (append (list (+ x 180) (- 180 y))
-                                   l))]
-          [else
-           (append (list x y) l)]))
-
-  (define (get-bbox-geo-wrap geobox)
-    (lambda(xy)
-      (let1 xy (apply wrap-lat xy)
-        (list (wrap-long-to (car xy)
-                            (ref* geobox 0 0)
-                            (ref* geobox 1 0))
-              (cadr xy)))))
-
-  (define (geo-wrap xy)
-    (let1 xy (apply wrap-lat xy)
-      ;; note: (fmod (car xy) 360) can't be expressed using wrap-long-to :(
-      (list (fmod (car xy) 360) 
-            (cadr xy))))
-
-  (define (raster-pos->4x4-box raster-pos)
-    (let1 tl (map (lambda(x) (- (floor->exact x) 1)) raster-pos)
-      (list tl (map (cut + <> 4) tl))))
-
+   '(raster-pos->4x4-box))
   ))
 
 (define (osr-is-geographic? osr)

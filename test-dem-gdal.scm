@@ -1,9 +1,9 @@
 #!/bin/bash
 #| -*- mode: scheme; coding: utf-8; -*-
-USE_RUNTIME_COMPILE="$1"
-test -z "$USE_RUNTIME_COMPILE" || USE_RUNTIME_COMPILE="-Fuse-runtime-compile"
+NO_RUNTIME_COMPILE="$1"
+[ "$NO_RUNTIME_COMPILE" = "-Fno-runtime-compile" ] || NO_RUNTIME_COMPILE=""
 # |#
-:; exec gosh -I. $USE_RUNTIME_COMPILE -- $0 "$@"
+:; exec gosh -I. $NO_RUNTIME_COMPILE -- $0 "$@"
 
 ;;disable debug print
 ;; (define-syntax debug-print
