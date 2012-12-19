@@ -1,6 +1,11 @@
 #!/bin/sh
 #| -*- mode: scheme; coding: utf-8; -*-
+# note: redirect stderr to /dev/null for inetd invokation
+if [ "x$1" = "x-v" ]; then
 exec gosh -I. -- $0 "$@"
+else
+exec gosh -I. -- $0 "$@" 2>/dev/null
+fi
 |#
 ;;;
 ;;;simple command line interface
