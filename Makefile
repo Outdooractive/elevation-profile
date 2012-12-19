@@ -39,6 +39,7 @@ installdirs:
 	$(INSTALL) -d $(DESTDIR)/$(datadir)/$(PACKAGE)
 	$(INSTALL) -d $(DESTDIR)/$(bindir)
 	$(INSTALL) -d $(DESTDIR)/$(sysconfdir)
+	$(INSTALL) -d $(DESTDIR)/$(sysconfdir)/xinetd.d
 	$(INSTALL) -d $(DESTDIR)/$(libdir)/cgi-bin
 
 install: installdirs
@@ -48,6 +49,7 @@ install: installdirs
 	# todo: really overwrite existing config?
 	$(INSTALL_DATA) elpro.conf $(DESTDIR)$(sysconfdir)/elpro
 	$(INSTALL_PROGRAM) elpro.fcgi $(DESTDIR)$(libdir)/cgi-bin/
+	$(INSTALL_DATA) xinetd.d/elpro $(DESTDIR)$(sysconfdir)/xinetd.d/elpro
 
 # todo: should make uninstall remove config file?!
 uninstall:
@@ -64,6 +66,7 @@ dist:
 			elpro.fcgi \
 			$(DATAFILES) $(SCMFILES) \
 			lua \
+			xinetd.d \
 			$(PACKAGE)-$(VERSION) \
 		&& tar czvf $(PACKAGE)-$(VERSION).tar.gz $(PACKAGE)-$(VERSION) \
 		&& rm -rf $(PACKAGE)-$(VERSION)

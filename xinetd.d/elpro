@@ -1,0 +1,19 @@
+service elpro
+{
+	disable		= no
+	type		= UNLISTED
+	socket_type	= stream
+	user		= elpro
+	server		= /usr/bin/elpro
+	wait		= no
+	flags		= NODELAY KEEPALIVE
+	bind		= 127.0.0.1
+	port		= 2223
+	log_type	= SYSLOG daemon
+	log_on_success  = PID HOST EXIT DURATION
+	log_on_failure  = HOST
+# if you have a ident daemon installed you might use something like:
+#	log_on_success  = PID HOST USERID EXIT DURATION
+#	log_on_failure  = HOST USERID
+#	flags		= NODELAY KEEPALIVE IDONLY
+}
