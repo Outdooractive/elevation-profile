@@ -2,22 +2,85 @@
 #| -*- mode: scheme; coding: utf-8; -*-
 exec gosh -I. -- $0 "$@"
 |#
+;;;
+;;;simple command line interface
+;;;(should also be suitable to be run from inetd)
+;;;
+
 (use elpro)
-(define z (dem-stack->xy->z*))
-(define polyline->3d (get-polyline->3d z))
-(define upsample-polyline->4d (get-upsample-polyline->4d z))
-(define sample-polyline->4d (get-sample-polyline->4d z))
-(define (help)
-  (print "Examples:")
-  (print "
-(z '(8.5 4) '(8.5 48))
-(polyline->3d '((8.5 48.5) (8.6 48.5)))
-(upsample-polyline->4d 'wgs84 '((8.5 48.5) (8.6 48.5)) 1000)
-(sample-polyline->4d 'wgs84 '((8.5 48.5) (8.6 48.5)) 3)
-(help)
-")
-  )
+
+(define *commands* '())
+
+(define-syntax define-command
+  (syntax-rules ()
+    ((_ (fn . arg) body ...)
+     (define-command fn (lambda arg body ...)))
+    ((_ fn lambda-body)
+     (define fn (let1 r lambda-body
+                  (push! *commands* (list 'fn r))
+                  r)))))
+
+(define-command (protocol-version)
+  '(1 0))
+(define-command z (dem-stack->xy->z*))
+(define-command polyline->3d (get-polyline->3d z))
+(define-command upsample-polyline->4d (get-upsample-polyline->4d z))
+(define-command sample-polyline->4d (get-sample-polyline->4d z))
+(define-command (ping) '(pong))
+(define-command (signal-read-error msg)
+  `(error ,msg))
+(define-command (help)
+  (print "Examples:
+(z (8.5 4) (8.5 48))
+(polyline->3d ((8.5 48.5) (8.6 48.5)))
+(upsample-polyline->4d wgs84 ((8.5 48.5) (8.6 48.5)) 1000)
+(sample-polyline->4d wgs84 ((8.5 48.5) (8.6 48.5)) 3)
+(ping)
+(help)")
+  (flush))
+
+(define (read/ns)
+  (let1 l (read-line)
+    (cond [(eof-object? l)
+           l]
+          [else
+           ;; hack: to disallow cyclic structures
+           (when (string-scan l #\#)
+             (error "read/ns doesn't allow cyclic structures"))
+           ;; note: empty line => eof
+           (read-from-string l)])))
 
 (define (main args)
-  (help)
-  (read-eval-print-loop))
+  (set-signal-handler! SIGPIPE #f) ;; ignore SIGPIPE
+  (set-signal-handler! SIGINT (lambda _ (exit 1)))
+  (when (equal? (ref args 1 "") "-v")
+    (help))
+  (read-eval-print-loop (lambda()
+                          (guard (e
+                                  [(<error> e)
+                                   `(signal-read-error ,(ref e 'message))]
+                                  [else
+                                   '(signal-read-error "unknown")])
+                                 (read/ns)))
+                        (lambda(expr env)
+                          (receive l
+                              (guard (e
+                                      [(<error> e)
+                                       (values `(error ,(ref e 'message)))]
+                                      [else
+                                       (values '(error))])
+                                     (when (not (list? expr))
+                                       (error "proper list expected"))
+                                     (let1 length-limit 1000
+                                       (when (> (length expr) length-limit)
+                                         (error #`"list length limit ,|length-limit| reached")))
+                                     (if-let1 f (car (assoc-ref *commands* (car expr) '(#f)))
+                                       (apply f (cdr expr))
+                                       (error #`"command ,(car expr) not found")))
+                            (apply values l)))
+                        #f
+                        (lambda()
+                          (flush)))
+  0 ;; todo: signal error if last command was error?!
+  )
+  
