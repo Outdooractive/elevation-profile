@@ -1,0 +1,5 @@
+lua clients (http and tcp)
+
+run ./test-tcp.sh to run a small tcp client test
+
+(note: you need bash and socat)
