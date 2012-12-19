@@ -20,6 +20,11 @@ http://karme.de/elevation-profile/demo?path=48.5,9|48.5,9.1&upsample=100&format=
 git repository at:
 http://karme.de/git/elevation-profile
 
+If http overhead is a problem you might wish to use the elpro tool
+providing a simple command line interface (either directly via pipes
+or maybe in combination with inetd/socat - take a look at the lua
+directory for an example)
+
 [1] https://developers.google.com/maps/documentation/javascript/elevation
 [2] http://karme.de/freedem
 [3] http://www.gdal.org/formats_list.html
