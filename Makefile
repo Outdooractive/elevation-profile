@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.2
+VERSION  = 0.9.3
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -63,6 +63,7 @@ dist:
 			test-dem-gdal.scm \
 			elpro.fcgi \
 			$(DATAFILES) $(SCMFILES) \
+			lua \
 			$(PACKAGE)-$(VERSION) \
 		&& tar czvf $(PACKAGE)-$(VERSION).tar.gz $(PACKAGE)-$(VERSION) \
 		&& rm -rf $(PACKAGE)-$(VERSION)
