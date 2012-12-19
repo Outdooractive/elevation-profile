@@ -21,6 +21,9 @@
   gauche-fastcgi [2]
   gnuplot-nox (for svg output)
 
+* additional dependencies for tcp service
+  (x)inetd, socat or similar
+
 * compile from source
   run:
   make

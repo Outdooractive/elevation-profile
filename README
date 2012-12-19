@@ -21,10 +21,18 @@ git repository at:
 http://karme.de/git/elevation-profile
 
 If http overhead is a problem you might wish to use the elpro tool
-providing a simple command line interface (either directly via pipes
-or maybe in combination with inetd/socat - take a look at the lua
-directory for an example)
+providing a simple command line interface. You can use it either
+directly via pipes or in combination with good old (x)inetd [4,5] or
+socat [6]. For xinetd an example configuration is included and
+installed by default. The default configuration binds to 127.0.0.1
+only. If you want to limit access to a specific user on localhost you
+can try using ident and hosts.allow/deny (unfortunately the lua socket
+library doesn't support unix domain sockets). The lua client example
+in lua/ uses socat.
 
 [1] https://developers.google.com/maps/documentation/javascript/elevation
 [2] http://karme.de/freedem
 [3] http://www.gdal.org/formats_list.html
+[4] http://en.wikipedia.org/wiki/Inetd
+[5] http://www.xinetd.org/
+[6] http://www.dest-unreach.org/socat/socat-version2.html
