@@ -15,6 +15,15 @@ function get_upsample_pl4d(host, port)
       return r
    end
 
+   -- todo
+   local function map(func, array)
+      local new_array = {}
+      for i,v in ipairs(array) do
+	 new_array[i] = func(v)
+      end
+      return new_array
+   end
+
    local function params(pl,dist)
       return 'path='..table.concat(map(function(x) return table.concat(reverse(x),",") end, pl),"|")..'&upsample='..dist..'&format=sjs'
    end
