@@ -154,12 +154,12 @@
 (define (uniq l)
   (if (null? l)
     '()
-    (reverse (fold (lambda(n o)
-                     (if (equal? n (car o))
-                       o
-                       (cons n o)))
-                   (list (car l))
-                   (cdr l)))))
+    (reverse! (fold (lambda(n o)
+                      (if (equal? n (car o))
+                        o
+                        (cons n o)))
+                    (list (car l))
+                    (cdr l)))))
 
 ;; todo: parallel variant!
 (define (geod-add-measure s l)

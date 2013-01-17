@@ -65,10 +65,9 @@
 (define (dem-stack->xy->z* . args)
   (let-optionals* args ((projection "epsg:4326")
                         (dem-stack (default-dem-stack)))
-    (let* ((z (dem-stack->xy->z #?=projection #?=dem-stack))
-           (z2 (cut apply z <>)))
+    (let1 f (cute apply (dem-stack->xy->z projection dem-stack) <>)
       (lambda l
-        (map z2 l)))))
+        (map f l)))))
 
 ;; todo: also in ...
 (define-macro (debug-assert e)
@@ -77,11 +76,11 @@
 
 ;; todo: also in ...
 (define (zip-append-elt ll el)
-  (debug-assert (= (size-of ll) (size-of el)))
+  ;;(debug-assert (= (size-of ll) (size-of el)))
   (map (lambda(l e)
-	 (debug-assert (list? l))
-	 (debug-assert (not (list? e)))
-	 (append l (list e)))
+         ;;(debug-assert (list? l))
+         ;;(debug-assert (not (list? e)))
+         (append l (list e)))
        ll el))
 
 (define (polyline->3d get-z pl)
@@ -94,9 +93,16 @@
   (lambda(s pl max-dist)
     (geod-add-measure s (polyline->3d get-z (geod-upsample-polyline s pl max-dist)))))
 
+;; for profiling use:
+;; (define (get-upsample-polyline->4d get-z)
+;;   (lambda(s pl max-dist)
+;;     (let1 up #?=(geod-upsample-polyline s pl max-dist)
+;;           (let1 z #?=(polyline->3d get-z up)
+;;                 #?=(geod-add-measure s z)))))
+
 (define (get-sample-polyline->4d get-z)
   (lambda(s pl samples)
     (let1 plm (geod-sample-polyline-with-measure s pl samples)
       (zip-append-elt (polyline->3d get-z
-                                    (map (cut subseq <> 0 2) plm))
-                      (map (cut ref <> 2) plm)))))
+                                    (map (cute subseq <> 0 2) plm))
+                      (map (cute ref <> 2) plm)))))

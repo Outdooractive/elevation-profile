@@ -52,6 +52,7 @@
   (use gauche.uvector)
   (use gauche.process)
   (use runtime-compile)
+  (use binary.pack)
   ;;(use sxml.adaptor)
   (export dem->xy->z   
           dem->xy-project->z
@@ -246,6 +247,59 @@
     (let1 tl (map (lambda(x) (- (floor->exact x) 1)) raster-pos)
       (list tl (map (cut + <> 4) tl))))
 
+  (define (raster-pos->2x2-box raster-pos)
+    ;;(assert (list? raster-pos))
+    (let1 tl (map floor->exact raster-pos)
+      (list tl (map (cut + <> 2) tl))))
+
+  (define (raster-pos->1x1-box raster-pos)
+    ;;(assert (list? raster-pos))
+    (let1 tl (map round->exact raster-pos)
+      (list tl (map (cut + <> 1) tl))))
+
+  (define (get-rasterpos projection dataset)
+    (let1 osr (osr-from-dataset dataset)
+      (let1 f (apply compose
+                     (reverse ;; just for readability
+                      (filter (lambda(f) (not (eq? f identity)))
+                              (list
+                               (if (not (string-null? projection))
+                                 (osr-transform (osr-from-user-input projection)
+                                                (OSRCloneGeogCS osr))
+                                 identity)
+                               (if (osr-is-geographic? osr)
+                                 ;; todo: at the moment we can only get the
+                                 ;; geographic bbox if the dataset osr is
+                                 ;; geographic
+                                 (get-bbox-geo-wrap (gdal-geographic-bbox dataset))
+                                 ;; note: input always geographic!
+                                 geo-wrap)
+                               (gdal-get-projection dataset)
+                               (gdal-get-geotransform⁻¹ dataset)))))
+        (lambda(x y)
+          (f (list x y))))))
+
+  (define (get-rasterpos&bbox! projection dataset get-box width height)
+    (let1 rasterpos (get-rasterpos  projection dataset)
+      (lambda(x y rp box)
+        (guard (e [(transform-error? e)
+                   #f])
+               (let* ((rp2 (rasterpos x y))
+                      (box2 (get-box rp2)))
+                 (cond [(or (<= (caadr box2) 0)  (>= (caar box2) width)
+                            (<= (cadadr box2) 0) (>= (cadar box2) height))
+                        #f]
+                       [else
+                        (set! (ref rp 0) (car rp2))
+                        (set! (ref rp 1) (cadr rp2))
+                        ;; #?=rp
+                        ;; #?=box2
+                        (set! (ref box 0) (car (car box2)))
+                        (set! (ref box 1) (cadr (car box2)))
+                        (set! (ref box 2) (car (cadr box2)))
+                        (set! (ref box 3) (cadr (cadr box2)))
+                        #t]))))))
+
   )
  (else
   (compile-and-load
@@ -388,29 +442,36 @@
     (export symbolic-array-mul)
     )
 
-  ;; todo:
-  ;; - gdal already should provide that, no?
-  (define (gdal-get-geotransform⁻¹ dataset)
+  ;; todo: use macro?!
+  (define (compile-cise-function args body)
+    (let1 mod (compile-and-load
+               `((inline-stub
+                  (declcode
+                   (.include "gdal/gdal.h")
+                   (.include "gdal/ogr_srs_api.h"))
+                  (define-cproc foo ,args . ,body)))
+               `()
+               :libs (process-output->string "gdal-config --libs"))
+      (global-variable-ref mod 'foo)))
+
+  (define (gdal-get-geotransform-cise⁻¹ dataset)
     (let* ((A (array-inverse (array-mul (gdal-get-geotransform-matrix dataset)
                                         (array (shape 0 3 0 3)
                                                1.0 0.0 0.5
                                                0.0 1.0 0.5
                                                0.0 0.0 1.0))))
-           (sr (symbolic-array-mul A (array (shape 0 3 0 1) 'x 'y 1)))
-           (nf (let1 mod (compile-and-load
-                          `((inline-stub
-                             (define-cproc foo (x::<double> y::<double>)
-                               (return (SCM_LIST2
-                                        (Scm_MakeFlonum ,(array-ref sr 0 0))
-                                        (Scm_MakeFlonum ,(array-ref sr 1 0)))))))
-                          `())
-                 (global-variable-ref mod 'foo))))
-      ;;#?=(list (array-ref sr 0 0) (array-ref sr 1 0))
+           (sr (symbolic-array-mul A (array (shape 0 3 0 1) 'x 'y 1))))
+      `((set! x ,(array-ref sr 0 0))
+        (set! y ,(array-ref sr 1 0)))))
+
+  ;; todo:
+  ;; - gdal already should provide that, no?
+  (define (gdal-get-geotransform⁻¹ dataset)
+    (let1 nf (compile-cise-function '(x::<double> y::<double>)
+                                    (append (gdal-get-geotransform-cise⁻¹ dataset)
+                                            `((return (SCM_LIST2 (Scm_MakeFlonum x) (Scm_MakeFlonum y))))))
       (lambda(l)
-        ;; (let1 r (array-mul A (array (shape 0 3 0 1) (ref l 0) (ref l 1) 1))
-        ;;   (list (array-ref r 0 0) (array-ref r 1 0))
-        (nf (ref l 0) (ref l 1))
-        )))
+        (nf (ref l 0) (ref l 1)))))
 
   (define (get-gdal-read-band-row! band nodata)
     (let ((xsize (GDALGetRasterBandXSize band))
@@ -435,71 +496,197 @@
                                    2))))))
    '(interp-cubic))
 
-  (compile-and-load
-   `((inline-stub
-      (declcode
-       (.include "math.h"))
-      (define-cproc bbox-geo-wrap-2 (x::<double> y::<double> minx::<double> maxx::<double>)
-        (while 1
-          (cond [(< y -90)
-                 (+= x 180)
-                 (set! y (- -180 y))]
-                [(> y 90)
-                 (+= x 180)
-                 (set! y (- 180 y))]
-                [else
-                 (break)]))
-        ;; todo: improve
-        (while 1
-          (cond [(and (< x minx)
-                      (or (>= (- maxx minx) 360)
-                          (<= (+ x 360) maxx)))
-                 (+= x 360)]
-                [(and (> x maxx)
-                      (or (>= (- maxx minx) 360)
-                          (>= (- x 360) minx)))
-                 (-= x 360)]
-                [else
-                 (break)]))
-        (result (SCM_LIST2 (Scm_MakeFlonum x)
-                           (Scm_MakeFlonum y))))
-      (define-cproc geo-wrap-2 (x::<double> y::<double>)
-        (while 1
-          (cond [(< y -90)
-                 (+= x 180)
-                 (set! y (- -180 y))]
-                [(> y 90)
-                 (+= x 180)
-                 (set! y (- 180 y))]
-                [else
-                 (break)]))
-        (result (SCM_LIST2 (Scm_MakeFlonum (fmod x 360))
-                           (Scm_MakeFlonum y))))))
-   '(bbox-geo-wrap-2 geo-wrap-2))
+  (define (bbox-geo-wrap-cise-2 minx maxx)
+    `((while 1
+        (cond [(< y -90)
+               (+= x 180)
+               (set! y (- -180 y))]
+              [(> y 90)
+               (+= x 180)
+               (set! y (- 180 y))]
+              [else
+               (break)]))
+      ;; todo: improve
+      (while 1
+        (cond [(and (< x ,minx)
+                    (or (>= ,(- maxx minx) 360)
+                        (<= (+ x 360) ,maxx)))
+               (+= x 360)]
+              [(and (> x ,maxx)
+                    (or (>= ,(- maxx minx) 360)
+                        (>= (- x 360) ,minx)))
+               (-= x 360)]
+              [else
+               (break)]))))
+
+  (define (get-bbox-geo-wrap-cise geobox)
+    (bbox-geo-wrap-cise-2 (ref* geobox 0 0) (ref* geobox 1 0)))
 
   (define (get-bbox-geo-wrap geobox)
-    (lambda(xy)
-      (bbox-geo-wrap-2 (car xy) (cadr xy) (ref* geobox 0 0) (ref* geobox 1 0))))
+    (let1 f (compile-cise-function '(x::<double> y::<double>)
+                                   (append
+                                    (get-bbox-geo-wrap-cise geobox)
+                                    '((result (SCM_LIST2 (Scm_MakeFlonum x) (Scm_MakeFlonum y))))))
+      (lambda(xy)
+        (f (car xy) (cadr xy)))))
 
-  (define (geo-wrap xy)
-    (geo-wrap-2 (car xy) (cadr xy)))
+  (define (geo-wrap-cise)
+    '((while 1
+        (cond [(< y -90)
+               (+= x 180)
+               (set! y (- -180 y))]
+              [(> y 90)
+               (+= x 180)
+               (set! y (- 180 y))]
+              [else
+               (break)]))
+      (set! x (fmod x 360))))
 
-  ;; todo: not worth it?!
-  (compile-and-load
-   `((inline-stub
-      (declcode
-       (.include "math.h"))
-      (define-cproc raster-pos->4x4-box (l::<list>)
-        ;; todo: crap - see also gauche number.c how to do it
-        (unless (and (SCM_FLONUMP (SCM_CAR l)) (SCM_FLONUMP (SCM_CADR l)))
-          (Scm_Error "only flonum supported"))
-        (let* ((x::int (- (cast int (floor (SCM_FLONUM_VALUE (SCM_CAR l)))) 1))
-               (y::int (- (cast int (floor (SCM_FLONUM_VALUE (SCM_CADR l)))) 1)))
-          (result (SCM_LIST2
-                   (SCM_LIST2 (SCM_MAKE_INT x) (SCM_MAKE_INT y))
-                   (SCM_LIST2
-                    (SCM_MAKE_INT (+ x 4)) (SCM_MAKE_INT (+ y 4)))))))))
-   '(raster-pos->4x4-box))
+  (define (geo-wrap)
+    (let1 f (compile-cise-function '(x::<double> y::<double>)
+                                   (append
+                                    (geo-wrap-cise)
+                                    '((result (SCM_LIST2 (Scm_MakeFlonum x) (Scm_MakeFlonum y))))))
+      (lambda(xy)
+        (f (car xy) (cadr xy)))))
+
+  ;; todo: really ugly hack
+  (define (c-wrapper-ptr-value p)
+    (car (unpack  ;; no pointer?!
+          (case (c-sizeof (ptr <c-void>))
+            [(8) "Q"]
+            [(4) "L"]
+            [else
+             (error "pointer size not supported")])
+          :from-string (u8vector->string (slot-ref (cast (ptr <c-void>) p) 'buffer)))))
+
+  (define (c-wrapper-ptr->cise-ptr p)
+    (gc)
+    (gc)
+    `(cast (void *) ,(string->symbol (format "0x~x" (c-wrapper-ptr-value p)))))
+
+  (define (osr-transform-cise fromp top . args)
+    (let-optionals* args ((transform-error '(Scm_Error "transform failed")))
+      (cond [(osr-is-same? fromp top)
+             identity]
+            [else
+             (assert (not (null-ptr? fromp)))
+             (assert (not (null-ptr? top)))
+             `((let* ((from::(static OGRSpatialReferenceH) NULL)
+                      (to::(static OGRSpatialReferenceH) NULL)
+                      (t::(static OGRCoordinateTransformationH) NULL))
+                 (when (not t)
+                   (set! from ,(c-wrapper-ptr->cise-ptr fromp))
+                   (set! to ,(c-wrapper-ptr->cise-ptr top))
+                   (set! t (OCTNewCoordinateTransformation from to))
+                   (when (not t) (Scm_Error "failed to set up t")))
+                 (let* ((z::double 0))
+                   (when (not (OCTTransform t 1 (& x) (& y) (& z)))
+                     ,transform-error) ;; todo: use Scm_Raise ?
+                   )))])))
+
+  (define (gdal-get-projection-cise dataset . args)
+    (let-optionals* args ((transform-error '(Scm_Error "transform failed")))
+      (let ((hSRS (osr-from-dataset dataset)))
+        (if (osr-is-projected? hSRS)
+          (osr-transform-cise (OSRCloneGeogCS hSRS) hSRS transform-error)
+          identity)))) ;; (lambda(l) l))))
+
+  (define (get-rasterpos projection dataset)
+    (let* ((osr (osr-from-dataset dataset))
+           (f (compile-cise-function
+               '(x::<double> y::<double>)
+               (append (apply append (filter (lambda(f) (not (eq? f identity)))
+                                             (list
+                                              (if (not (string-null? projection))
+                                                (osr-transform-cise (osr-from-user-input projection)
+                                                                    (OSRCloneGeogCS osr))
+                                                identity)
+                                              (if (osr-is-geographic? osr)
+                                                ;; todo: at the moment we can only get the
+                                                ;; geographic bbox if the dataset osr is
+                                                ;; geographic
+                                                (get-bbox-geo-wrap-cise (gdal-geographic-bbox dataset))
+                                                ;; note: input always geographic!
+                                                (geo-wrap-cise))
+                                              (gdal-get-projection-cise dataset)
+                                              (gdal-get-geotransform-cise⁻¹ dataset))))
+                       '((result (SCM_LIST2 (Scm_MakeFlonum x) (Scm_MakeFlonum y))))))))
+      (lambda(x y)
+        (guard (e
+                [else
+                 ;; todo: check it really is a transform error?!
+                 (error <transform-error> :pos (list x y))])
+               (f x y)))))
+
+  (define raster-pos->4x4-box
+    `((set! tl_x (- (cast int (floor x)) 1))
+      (set! tl_y (- (cast int (floor y)) 1))
+      (set! br_x (+ tl_x 4))
+      (set! br_y (+ tl_y 4))))
+
+  (define raster-pos->2x2-box
+    `((set! tl_x (cast int (floor x)))
+      (set! tl_y (cast int (floor y)))
+      (set! br_x (+ tl_x 2))
+      (set! br_y (+ tl_y 2))))
+
+  (define raster-pos->1x1-box
+    ;; rint to match round->exact
+    `((set! tl_x (cast int (rint x)))
+      (set! tl_y (cast int (rint y)))
+      (set! br_x (+ tl_x 1))
+      (set! br_y (+ tl_y 1))))
+
+  (define (get-rasterpos&bbox! projection dataset get-box width height)
+    (let* ((osr (osr-from-dataset dataset))
+           (f (compile-cise-function
+               '(x::<double> y::<double> rp::<f64vector> box::<s64vector>)
+               `((let* ((tl_x::int64_t)
+                        (tl_y::int64_t)
+                        (br_x::int64_t)
+                        (br_y::int64_t))
+                   . ,(append
+                       ;; `((Scm_Printf SCM_CURERR "huhu\n"))
+                       (apply append (filter (lambda(f) (not (eq? f identity)))
+                                             (list
+                                              (if (not (string-null? projection))
+                                                (osr-transform-cise (osr-from-user-input projection)
+                                                                    (OSRCloneGeogCS osr)
+                                                                    '(return SCM_FALSE))
+                                                identity)
+                                              (if (osr-is-geographic? osr)
+                                                ;; todo: at the moment we can only get the
+                                                ;; geographic bbox if the dataset osr is
+                                                ;; geographic
+                                                (get-bbox-geo-wrap-cise (gdal-geographic-bbox dataset))
+                                                ;; note: input always geographic!
+                                                (geo-wrap-cise))
+                                              (gdal-get-projection-cise dataset '(return SCM_FALSE))
+                                              (gdal-get-geotransform-cise⁻¹ dataset))))
+                       get-box
+                       `((cond [(or (<= br_x 0) (>= tl_x ,width)
+                                    (<= br_y 0) (>= tl_y ,height))
+                                (result SCM_FALSE)]
+                               [else
+                                (when (or (< (SCM_UVECTOR_SIZE rp) 2)
+                                          (< (SCM_UVECTOR_SIZE box) 4))
+                                  (Scm_Printf SCM_CURERR "abort\n")
+                                  (abort))
+                                (set! (aref (SCM_F64VECTOR_ELEMENTS rp) 0) x)
+                                (set! (aref (SCM_F64VECTOR_ELEMENTS rp) 1) y)
+                                (set! (aref (SCM_S64VECTOR_ELEMENTS box) 0) tl_x)
+                                (set! (aref (SCM_S64VECTOR_ELEMENTS box) 1) tl_y)
+                                (set! (aref (SCM_S64VECTOR_ELEMENTS box) 2) br_x)
+                                (set! (aref (SCM_S64VECTOR_ELEMENTS box) 3) br_y)
+                                (result SCM_TRUE)]))))))))
+      (lambda(x y rp box)
+        (guard (e
+                [else
+                 ;; #?=e
+                 (error <transform-error> :pos (list x y))])
+               (f x y rp box)))))
+
   ))
 
 (define (osr-is-geographic? osr)
@@ -598,18 +785,9 @@
   (assert (= (size-of rows) 2))
   (bi-interp u v interp-linear rows))
 
-(define (raster-pos->2x2-box raster-pos)
-  (assert (list? raster-pos))
-  (let1 tl (map floor->exact raster-pos)
-    (list tl (map (cut + <> 2) tl))))
-
-(define (raster-pos->1x1-box raster-pos)
-  (assert (list? raster-pos))
-  (let1 tl (map round->exact raster-pos)
-    (list tl (map (cut + <> 1) tl))))
-
-(define (raster-pos->uv raster-pos)
-  (map (lambda(x) (- x (floor x))) raster-pos))
+(define (raster-pos->uv x y)
+  (values (- x (floor x))
+          (- y (floor y))))
 
 (define gdal-init
   (let1 called #f
@@ -644,8 +822,6 @@
     #f
     n))
 
-(define (range s e) (iota (- e s) s))
-
 ;; return function to get z value at position x y
 ;; (using coordinate system described by projection)
 ;; note: empty projection => input cs is _geographic cs_ of dataset
@@ -660,23 +836,10 @@
             (height (GDALGetRasterBandYSize band))
             (osr (osr-from-dataset dataset)))
         (let1 xy->z (lambda(fi get-box box-width box-height)
-                      (let ((rasterpos (apply compose
-                                              (reverse ;; just for readability
-                                               (filter (lambda(f) (not (eq? f identity)))
-                                                       (list
-                                                        (if (not (string-null? projection))
-                                                          (osr-transform (osr-from-user-input projection)
-                                                                         (OSRCloneGeogCS osr))
-                                                          identity)
-                                                        (if (osr-is-geographic? osr)
-                                                          ;; todo: at the moment we can only get the
-                                                          ;; geographic bbox if the dataset osr is
-                                                          ;; geographic
-                                                          (get-bbox-geo-wrap (gdal-geographic-bbox dataset))
-                                                          ;; note: input always geographic!
-                                                          geo-wrap)
-                                                        (gdal-get-projection dataset)
-                                                        (gdal-get-geotransform⁻¹ dataset))))))
+                      (let ((rasterpos (get-rasterpos projection dataset)) ;; todo: get rid of rasterpos
+                            (rp (make-f64vector 2))
+                            (box (make-s64vector 4))
+                            (rasterpos&bbox! (get-rasterpos&bbox! projection dataset get-box width height))
                             ;; todo:
                             ;; - only what I want if projection is a geographic cs?
                             ;; - slow, but typically not called very often
@@ -692,75 +855,66 @@
                                                             identity)
                                                           (cut subseq <> 0 2))))))
                             (read-row! (get-gdal-read-band-row! band (gdal-band-nodata band)))
-                            (rows (map (lambda(y) (make-f32vector box-width)) (iota box-height))))
+                            (rows (map (lambda(y) (make-f32vector box-width)) (iota box-height)))
+                            (geographic-dataset? (osr-is-geographic? osr)))
                         (let ((read-row (lambda(y xs xe)
                                           (let1 row (make-f32vector (- xe xs))
                                             (read-row! row y xs xe)
                                             row)))
-                              (read-box! (lambda(box)
-                                           (let ((start (caar box))
-                                                 (end   (caadr box)))
-                                             (apply +
-                                                    (map-with-index (lambda(idx y)
-                                                                      (read-row! (ref rows idx) y start end))
-                                                                    (range (cadar box) (cadadr box))))))))
-                          (lambda(x y)
-                            (guard (e [(transform-error? e)
-                                       ;; todo: maybe not what i want!
-                                       ;; #?=(list e (transform-error-pos e) x y)
-                                       (next x y)])
-                                   (let* ((rp (rasterpos (list x y)))
-                                          (box (get-box rp)))
-                                     ;; bbox test
-                                     (if (or (<= (caadr box) 0)  (>= (caar box) width)
-                                             (<= (cadadr box) 0) (>= (cadar box) height))
-                                       (next x y)
-                                       (let* ((uv (raster-pos->uv rp))
-                                              (nans (read-box! box)))
-                                         (cond [(= nans (* box-width box-height))
-                                                ;; (every (lambda(r)
-                                                ;;          (every nan? (f32vector->list r)))
-                                                ;;        rows)
-                                                ;; all nan
-                                                ;; #?="all nan!"
-                                                (next x y)]
-                                               [(> nans 0)
-                                                ;; try to replace nan
-                                                (call/cc
-                                                 (lambda(break)
-                                                   (for-each-with-index
-                                                    (lambda(ry r)
-                                                      (for-each-with-index
-                                                       (lambda(rx v)
-                                                         (when (nan? v)
-                                                           (receive (cx cy)
-                                                               (apply values
-                                                                      (rasterpos⁻¹ (list (+ (caar box) rx)
-                                                                                         (+ (cadar box) ry))))
-                                                             (if-let1 nv
-                                                                 (or (and (osr-is-geographic? osr)
-                                                                          (let* ((xy (lambda(x y)
-                                                                                       ;; todo: only allow close match / or interpolate?!
-                                                                                       ;; (but then i could use the offset stack ...)
-                                                                                       (let ((x (round->exact x))
-                                                                                             (y (round->exact y)))
-                                                                                         (ref (read-row y x (+ x 1)) 0))))
-                                                                                 (p (lambda l
-                                                                                      (nan-to-#f (apply xy (rasterpos l))))))
-                                                                            (or (p (+ cx 360.0) cy)
-                                                                                (p (- cx 360.0) cy)
-                                                                                (and (or (> cy 90.0) (< cy -90.0))
-                                                                                     (p cx cy)))))
-                                                                     (nan-to-#f (next cx cy)))
-                                                               (set! (ref r rx) nv)
-                                                               (break (next x y))))))
-                                                       r))
-                                                    rows)
-                                                   ;; (assert (not (any (cut find nan? <>) rows)))
-                                                   (fi (car uv) (cadr uv) rows)))]
-                                               [else
-                                                (assert (zero? nans))
-                                                (fi (car uv) (cadr uv) rows)])))))))))
+                              (read-box! (lambda()
+                                           (let ((start (s64vector-ref box 0))
+                                                 (end   (s64vector-ref box 2))
+                                                 (y (s64vector-ref box 1))
+                                                 (r 0))
+                                             (dotimes (idx box-height)
+                                               (inc! r (read-row! (ref rows idx) (+ y idx) start end)))
+                                             r)))
+                              )
+                          (let* ((read-pixel (lambda(x y)
+                                               (let1 x (round->exact x)
+                                                 (f32vector-ref (read-row (round->exact y) x (+ x 1)) 0))))
+                                 (read-geo-pixel (lambda(x y)
+                                                   (guard (e [(transform-error? e)
+                                                              #f])
+                                                          (nan-to-#f (apply read-pixel (rasterpos x y)))))))
+                            (lambda(x y)
+                              (if (not (rasterpos&bbox! x y rp box))
+                                (next x y)
+                                (let ((nans (read-box!)))
+                                  (cond [(= nans (* box-width box-height))
+                                         (next x y)]
+                                        [(> nans 0)
+                                         ;; try to replace nan
+                                         ;; todo: maybe split into geographic and non-geographic case?
+                                         (call/cc
+                                          (lambda(break)
+                                            (for-each-with-index
+                                             (lambda(ry r)
+                                               (for-each-with-index
+                                                (lambda(rx v)
+                                                  (when (nan? v)
+                                                    (receive (cx cy)
+                                                        (apply values (rasterpos⁻¹ (list (+ (s64vector-ref box 0) rx)
+                                                                                         (+ (s64vector-ref box 1) ry))))
+                                                      (if-let1 nv
+                                                          (or (and geographic-dataset?
+                                                                   (or (read-geo-pixel (+ cx 360.0) cy)
+                                                                       (read-geo-pixel (- cx 360.0) cy)
+                                                                       (and (or (> cy 90.0) (< cy -90.0))
+                                                                            (read-geo-pixel cx cy))))
+                                                              (nan-to-#f (next cx cy)))
+                                                        (set! (ref r rx) nv)
+                                                        ;; failed to replace nan
+                                                        (break (next x y))))))
+                                                r))
+                                             rows)
+                                            ;; (assert (not (any (cut find nan? <>) rows)))
+                                            (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
+                                              (fi u v rows))))]
+                                        [else
+                                         ;; (assert (zero? nans))
+                                         (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
+                                           (fi u v rows))]))))))))
           (case interpolation
             ((bi-cubic)  (xy->z interp-bicubic raster-pos->4x4-box 4 4))
             ((bi-linear) (xy->z interp-bilinear raster-pos->2x2-box 2 2))
