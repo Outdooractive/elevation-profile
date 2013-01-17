@@ -104,15 +104,23 @@ NO_RUNTIME_COMPILE="$1"
        (let1 z (dem->xy->z *vrt-file*)
          (round->exact (z 8.5 48.5))))
 
-(test* "dem->xy-project->z (1)"
+(test* "dem->xy-project->z"
        735
        (let1 z (dem->xy-project->z "epsg:4326" *vrt-file*)
          (round->exact (z 8.5 48.5))))
 
-(test* "dem->xy-project->z (2)"
+;; (subseq ((osr-transform (osr-from-user-input "epsg:4326") (osr-from-user-input "epsg:25832")) '(8.5 48.5)) 0 2)
+(test* "dem->xy-project->z (utm32)"
        735
        (let1 z (dem->xy-project->z "epsg:25832" *vrt-file*)
          (round->exact (z 463064.1314 5371996.2822))))
+
+;; (subseq ((osr-transform (osr-from-user-input "epsg:4326") (osr-from-user-input "epsg:25833")) '(8.5 48.5)) 0 2)
+;; (19959.274411356135 5392310.583687477)
+(test* "dem->xy-project->z (utm33->utm32)"
+       735
+       (let1 z (dem->xy-project->z "epsg:25833" "N48E008_utm.tif")
+         (round->exact (z 19959.274411356135 5392310.583687477))))
 
 (test* "dem->xy-project->z nodata(1)?"
        #f
