@@ -1,5 +1,5 @@
 -*- mode: compilation -*-
-grep -nH -e Copyright *.scm
+grep -nH -e Copyright -r .
 
 dem-gdal.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
 elpro-client.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
@@ -11,6 +11,8 @@ google-elevation.scm:3:;;;   Copyright (c) 2010-2012 Jens Thiele <karme@karme.de
 google-elevation.scm:5:;;;   Copyright (c) 2000-2012  Shiro Kawai  <shiro@acm.org>
 runtime-compile.scm:4:;;;   Copyright (c) 2011 Jens Thiele <karme@karme.de>
 svg-plot.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+./python/sexp.py:15:# Copyright 2007-2011, by Paul McGuire
+./python/sexp.py:16:# Copyright (c) 2003,2004  Paul T. McGuire
 
 gmted2010_mn30@480.tif:
 
