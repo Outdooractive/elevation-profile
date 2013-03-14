@@ -44,6 +44,7 @@ real = pyparsing.Regex(r"[+-]?\d+\.\d*([eE][+-]?\d+)?").setParseAction(lambda to
 literal = real | decimal | qstring
 sexpReader << ( literal | pyparsing.nestedExpr("(",")",sexpReader) )
 
+# todo: quite slow?!
 def sexpReadFromString(s):
     return sexpReader.parseString(s).asList()[0]
 
