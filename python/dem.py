@@ -44,9 +44,8 @@ def getFunctions(host, port):
         f[0].close()
         connect()
 
-    def remoteEval2(x):
-        # sys.stderr.write(sexpWriteToString(x)+"\n")
-        f[0].write(sexpWriteToString(x)+"\n")
+    def remoteEval2(s):
+        f[0].write(s)
         f[0].flush()
         r=f[0].readline()
         if r=='':
@@ -55,17 +54,19 @@ def getFunctions(host, port):
         return r
 
     def remoteEval(x):
-        return retry(lambda:remoteEval2(x), 5, lambda e: (sys.stderr.write("error:"+str(e)+"\n"), reconnect()))
+        s=sexpWriteToString(x)+"\n"
+        return retry(lambda:remoteEval2(s), 5, lambda e: (sys.stderr.write("error:"+str(e)+"\n"), reconnect()))
 
     def assertProtocol2(rmaj,rmin):
-        # sys.stderr.write(str(parseResult(remoteEval(["protocol-version"])))+"\n")
         maj,min=parseResult(remoteEval(["protocol-version"]))
         assert maj==rmaj
         assert min==rmin
 
     def parseResult(s):
-        assert not s.startswith('(error')
-        return sexpReadFromString(s)
+        r=sexpReadFromString(s)
+        if len(r)>0 and r[0]=='error':
+            raise Exception(r)
+        return r
 
     def pl4d(pl,dist):
         return parseResult(remoteEval(["upsample-polyline->4d","wgs84",pl,dist]))
