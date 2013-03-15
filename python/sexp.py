@@ -38,11 +38,18 @@ import pyparsing
 import string
 
 sexpReader = pyparsing.Forward()
-qstring = pyparsing.dblQuotedString.setParseAction(pyparsing.removeQuotes)
+qstring = pyparsing.QuotedString(quoteChar='"',escChar='\\')
 decimal = pyparsing.Regex(r'-?0|[1-9]\d*').setParseAction(lambda t: int(t[0])) # maybe always return float?
 real = pyparsing.Regex(r"[+-]?\d+\.\d*([eE][+-]?\d+)?").setParseAction(lambda tokens: float(tokens[0]))
-literal = real | decimal | qstring
-sexpReader << ( literal | pyparsing.nestedExpr("(",")",sexpReader) )
+symbol = pyparsing.Word(pyparsing.alphanums + "-./_:*+=")
+boolTrue = pyparsing.Literal("#t").setParseAction( pyparsing.replaceWith(True) )
+boolFalse = pyparsing.Literal("#f").setParseAction( pyparsing.replaceWith(False) )
+bool = boolTrue | boolFalse
+literal = real | decimal | qstring | symbol | bool
+# define punctuation literals
+LPAR, RPAR = map(pyparsing.Suppress, "()")
+sexpList = pyparsing.Group(LPAR + pyparsing.ZeroOrMore(sexpReader) + RPAR)
+sexpReader << ( literal | sexpList )
 
 # todo: quite slow?!
 def sexpReadFromString(s):
@@ -57,4 +64,4 @@ def sexpWriteToString(l):
     elif isinstance(l,type([])):
         return "("+string.join(map(lambda x: sexpWriteToString(x), l))+")"
     else:
-        assert False
+        raise Exception("unsupported type",type(l),l)
