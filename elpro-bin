@@ -77,7 +77,7 @@ fi
                                        (values '(error))])
                                      (when (not (list? expr))
                                        (error "proper list expected"))
-                                     (let1 length-limit 1000
+                                     (let1 length-limit 10000000
                                        (when (> (length expr) length-limit)
                                          (error #`"list length limit ,|length-limit| reached")))
                                      (if-let1 f (car (assoc-ref *commands* (car expr) '(#f)))
