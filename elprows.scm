@@ -46,7 +46,7 @@
             (svg-plot (list
                        (if (= (length (car pl)) 4)
                          (map (cut permute <> '(3 2)) pl)
-                         (map-with-index (lambda(idx x) (list idx (ref x 2)))))))))))
+                         (map-with-index (lambda(idx x) (list idx (ref x 2))) pl))))))))
 
 (define (points->sxml pl)
   `(result . ,(map (lambda(p)
