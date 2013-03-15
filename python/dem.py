@@ -11,7 +11,12 @@ def retry(f, count, onerrorf = lambda e: (sys.stderr.write("error:"+str(e)+"\n")
     while True:
         try:
             return f()
-        except Exception as e:
+        #except Exception as e:
+        except Exception:
+            # ugly workaround for python incompatibilities
+            # see also:
+            # http://stackoverflow.com/questions/11285313/try-except-as-error-in-python-2-5-python-3-x
+            _, e, _ = sys.exc_info()
             try:
                 onerrorf(e)
             except:
