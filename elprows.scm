@@ -43,7 +43,10 @@
         (with-output-to-string
           (lambda()
             (current-output-port)
-            (svg-plot (list (map (cut permute <> '(3 2)) pl)))))))
+            (svg-plot (list
+                       (if (= (length (car pl)) 4)
+                         (map (cut permute <> '(3 2)) pl)
+                         (map-with-index (lambda(idx x) (list idx (ref x 2)))))))))))
 
 (define (points->sxml pl)
   `(result . ,(map (lambda(p)
