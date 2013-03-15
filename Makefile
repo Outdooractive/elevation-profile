@@ -77,4 +77,4 @@ check:
 	./test-dem-gdal.scm -Fno-runtime-compile
 
 clean:
-	-rm -vf lores.tif N48E00* all.vrt*
+	-rm -vf lores.tif N48E00* all.vrt* *~ python/*~ python/*.pyc
