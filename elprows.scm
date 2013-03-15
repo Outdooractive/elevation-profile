@@ -60,8 +60,8 @@
                  (lambda()
 		   (report-error e)
                    (with-error-to-port (current-output-port)
-				       (lambda()
-					 (report-error e))))))))
+                     (lambda()
+                       (report-error e))))))))
           ,x))
 
 (define (cgi-elpro context params)
