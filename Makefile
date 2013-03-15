@@ -66,6 +66,7 @@ dist:
 			elpro.fcgi \
 			$(DATAFILES) $(SCMFILES) \
 			lua \
+			python \
 			xinetd.d \
 			$(PACKAGE)-$(VERSION) \
 		&& tar czvf $(PACKAGE)-$(VERSION).tar.gz $(PACKAGE)-$(VERSION) \
