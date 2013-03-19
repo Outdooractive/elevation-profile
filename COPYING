@@ -1,18 +1,18 @@
 -*- mode: compilation -*-
 grep -nH -e Copyright -r .
-
+elevation-profile-client.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+runtime-compile.scm:4:;;;   Copyright (c) 2011 Jens Thiele <karme@karme.de>
 dem-gdal.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
-elpro-client.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
-elpro.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+svg-plot.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+elevation-profile.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
 format-json.scm:4:;;; Copyright (c) 2009-2012 Jens Thiele <karme@karme.de>
 format-json.scm:8:;;;   Copyright (c) 2006 Rui Ueyama (rui314@gmail.com)
 geod.scm:6:;;; Copyright (C) 2010-2012 Jens Thiele <karme@karme.de>
+python/sexp.py:15:# Copyright 2007-2011, by Paul McGuire
+python/sexp.py:16:# Copyright (c) 2003,2004  Paul T. McGuire
 google-elevation.scm:3:;;;   Copyright (c) 2010-2012 Jens Thiele <karme@karme.de>
 google-elevation.scm:5:;;;   Copyright (c) 2000-2012  Shiro Kawai  <shiro@acm.org>
-runtime-compile.scm:4:;;;   Copyright (c) 2011 Jens Thiele <karme@karme.de>
-svg-plot.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
-./python/sexp.py:15:# Copyright 2007-2011, by Paul McGuire
-./python/sexp.py:16:# Copyright (c) 2003,2004  Paul T. McGuire
+google-elevation-client.scm:4:;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
 
 gmted2010_mn30@480.tif:
 

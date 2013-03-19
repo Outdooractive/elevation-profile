@@ -30,7 +30,7 @@
 ;;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
-(define-module elpro
+(define-module elevation-profile
   (use srfi-1)
   (use util.list)
   (use gauche.sequence)
@@ -41,7 +41,7 @@
           get-upsample-polyline->4d
           get-sample-polyline->4d))
 
-(select-module elpro)
+(select-module elevation-profile)
 
 (define (keyword-exists? key kv-list)
   (or (get-keyword key kv-list #f)

@@ -23,9 +23,9 @@ sysconfdir = $(prefix)/etc
 # /usr/local directory) / maybe use --pkglibdir?
 SCMDIR=`gauche-config --sitelibdir`
 
-SCMFILES=dem-gdal.scm elpro-client.scm elpro.scm elprows.scm		\
-format-json.scm geod.scm google-elevation.scm runtime-compile.scm	\
-svg-plot.scm
+SCMFILES=dem-gdal.scm elevation-profile-client.scm		\
+elevation-profile.scm elevation-profilews.scm format-json.scm	\
+geod.scm google-elevation.scm runtime-compile.scm svg-plot.scm
 
 # not really needed
 SCMFILES+=google-elevation-client.scm

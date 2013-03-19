@@ -12,7 +12,7 @@ fi
 ;;;(should also be suitable to be run from inetd)
 ;;;
 
-(use elpro)
+(use elevation-profile)
 (use util.list)
 
 (define *commands* '())

@@ -63,7 +63,7 @@
        (assoc-ref (parse-json-string json) "results")))
 
 ;; todo: temporarily ignore or block sigpipe?!
-(define (elpro-http-request server request-uri method params reader)
+(define (elevation-profile-http-request server request-uri method params reader)
   (let1 tc (make <real-time-counter>)
     (receive (status headers body)
         (with-time-counter tc (case method
@@ -84,11 +84,11 @@
 
 ;; note: google does not support post
 (define (google-http-request params)
-  (elpro-http-request "maps.googleapis.com"
-		      "/maps/api/elevation/json"
-		      'get
-		      (append params '((sensor "false")))
-		      json->list))
+  (elevation-profile-http-request "maps.googleapis.com"
+                                  "/maps/api/elevation/json"
+                                  'get
+                                  (append params '((sensor "false")))
+                                  json->list))
 
 (define (google-polyline->3d pl)
   (google-http-request `((locations ,(encode-polyline pl)))))

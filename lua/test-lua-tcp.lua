@@ -1,5 +1,5 @@
 #!/usr/bin/lua
-require('elpro-tcp')
+require('elevation-profile-tcp')
 function test()
    local upsample_pl4d=get_upsample_pl4d("127.0.0.1",10000)
    for i=1,5000 do

@@ -5,10 +5,10 @@ export PATH
 exec gosh -I. -- $0 "$@"
 |#
 
-(use elprows)
+(use elevation-profile-ws)
 
 (define (config)
   '())
 
 (define (main args)
-  (apply elprows-main (cons config args)))
+  (apply elevation-profile-ws-main (cons config args)))

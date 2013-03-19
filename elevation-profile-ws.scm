@@ -1,5 +1,5 @@
-(define-module elprows
-  (use elpro)
+(define-module elevation-profile-ws
+  (use elevation-profile)
   (use www.cgi)
   (use www.fastcgi)
   (use util.list)
@@ -8,9 +8,9 @@
   (use svg-plot)
   (use sxml.serializer)
   (export
-   elprows-main))
+   elevation-profile-ws-main))
 
-(select-module elprows)
+(select-module elevation-profile-ws)
 
 (define (create-context config)
   (let1 get-z (apply dem-stack->xy->z* config)
@@ -64,7 +64,7 @@
                        (report-error e))))))))
           ,x))
 
-(define (cgi-elpro context params)
+(define (cgi-elevation-profile context params)
   (hack
    (let ((query (google-elevation-query params)))
      ((assoc-ref `(("js"    . ,google-elevation-v3-out)
@@ -84,12 +84,12 @@
 	[else
 	 (error "todo")])))))
 
-(define (elprows-main config . args)
+(define (elevation-profile-ws-main config . args)
   (when (eq? (port-buffering (current-error-port)) :none)
     (set! (port-buffering (current-error-port)) :line))
   ;; todo: why? too late anyway?!
   (sys-putenv "PATH" "/usr/local/bin:/usr/bin:/bin")
   (let* ((context (create-context (config)))
-	 (handle-request (cut cgi-elpro context <>)))
+	 (handle-request (cut cgi-elevation-profile context <>)))
     (with-fastcgi (cut cgi-main handle-request)))
   0)

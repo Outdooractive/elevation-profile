@@ -30,7 +30,7 @@
 ;;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
-(define-module elpro-client
+(define-module elevation-profile-client
   (use rfc.uri)
   (use rfc.http)
   (use util.list)
@@ -40,7 +40,7 @@
           upsample-polyline->4d
           sample-polyline->4d))
 
-(select-module elpro-client)
+(select-module elevation-profile-client)
 
 (define (encode-polyline pl)
   (string-join (map (lambda(p)
@@ -63,7 +63,7 @@
        (assoc-ref (parse-json-string json) "results")))
 
 ;; todo: temporarily ignore or block sigpipe?!
-(define (elpro-http-request server request-uri method params reader)
+(define (elevation-profile-http-request server request-uri method params reader)
   (let1 tc (make <real-time-counter>)
     (receive (status headers body)
         (with-time-counter tc (case method
@@ -93,11 +93,11 @@
          (read-from-string s)))
 
 (define (sexpr-http-request service params)
-  (elpro-http-request (car service)
-		      (cadr service)
-		      'post
-		      (append params '((format sexpr)))
-                      my-read-from-string))
+  (elevation-profile-http-request (car service)
+                                  (cadr service)
+                                  'post
+                                  (append params '((format sexpr)))
+                                  my-read-from-string))
 
 (define (polyline->3d service pl . args)
   (sexpr-http-request service (append args
