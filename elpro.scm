@@ -60,7 +60,7 @@
                                               ;; todo: maybe just eval?!
                                               (error "not allowed" ov)])))))
              l))
-       (with-input-from-file "/etc/elpro" read)))
+       (with-input-from-file "/etc/elevation-profile" read)))
 
 (define (dem-stack->xy->z* . args)
   (let-optionals* args ((projection "epsg:4326")

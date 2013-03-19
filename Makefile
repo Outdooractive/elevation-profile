@@ -45,25 +45,25 @@ installdirs:
 install: installdirs
 	$(INSTALL_DATA) $(SCMFILES) $(DESTDIR)$(SCMDIR)/
 	$(INSTALL_DATA) $(DATAFILES) $(DESTDIR)$(datadir)/$(PACKAGE)
-	$(INSTALL_PROGRAM) elpro-bin $(DESTDIR)$(bindir)/elpro
+	$(INSTALL_PROGRAM) elevation-profile $(DESTDIR)$(bindir)/elevation-profile
 	# todo: really overwrite existing config?
-	$(INSTALL_DATA) elpro.conf $(DESTDIR)$(sysconfdir)/elpro
-	$(INSTALL_PROGRAM) elpro.fcgi $(DESTDIR)$(libdir)/cgi-bin/
-	$(INSTALL_DATA) xinetd.d/elpro $(DESTDIR)$(sysconfdir)/xinetd.d/elpro
+	$(INSTALL_DATA) elevation-profile.conf $(DESTDIR)$(sysconfdir)/elevation-profile
+	$(INSTALL_PROGRAM) elevation-profile.fcgi $(DESTDIR)$(libdir)/cgi-bin/
+	$(INSTALL_DATA) xinetd.d/elevation-profile $(DESTDIR)$(sysconfdir)/xinetd.d/elevation-profile
 
 # todo: should make uninstall remove config file?!
 uninstall:
 	for i in $(SCMFILES); do rm -v $(DESTDIR)$(SCMDIR)/$$i; done
 	for i in $(DATAFILES); do rm -v $(DESTDIR)$(datadir)/$(PACKAGE)/$$i; done
 	-rmdir $(DESTDIR)$(datadir)/$(PACKAGE)
-	rm -v $(DESTDIR)$(bindir)/elpro
-	rm -v  $(DESTDIR)/$(libdir)/cgi-bin/elpro.fcgi
+	rm -v $(DESTDIR)$(bindir)/elevation-profile
+	rm -v  $(DESTDIR)/$(libdir)/cgi-bin/elevation-profile.fcgi
 
 dist:
 	mkdir $(PACKAGE)-$(VERSION) && \
-		cp -vr Makefile README INSTALL COPYING elpro-bin elpro.conf \
+		cp -vr Makefile README INSTALL COPYING elevation-profile elevation-profile.conf \
 			test-dem-gdal.scm \
-			elpro.fcgi \
+			elevation-profile.fcgi \
 			$(DATAFILES) $(SCMFILES) \
 			lua \
 			python \

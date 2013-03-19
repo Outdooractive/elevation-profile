@@ -44,7 +44,7 @@
    # install
    apt-get update && apt-get install elevation-profile
    # test fcgi (maybe do a "service apache2 restart" first)
-   wget -q -O - 'http://localhost/cgi-bin/elpro.fcgi?path=40,9' && echo
+   wget -q -O - 'http://localhost/cgi-bin/elevation-profile.fcgi?path=40,9' && echo
 
 ** debian/wheezy
    # as root
@@ -56,7 +56,7 @@
    # install
    apt-get update && apt-get install elevation-profile
    # test fcgi (maybe do a "service apache2 restart" first)
-   wget -q -O - 'http://localhost/cgi-bin/elpro.fcgi?path=40,9' && echo
+   wget -q -O - 'http://localhost/cgi-bin/elevation-profile.fcgi?path=40,9' && echo
    
 * References:
   

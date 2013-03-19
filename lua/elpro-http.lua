@@ -3,7 +3,7 @@ require("json")
 
 function get_upsample_pl4d(host, port)
    local clib = curl.easy_init()
-   local url = 'http://'..host..':'..port..'/cgi-bin/elpro.fcgi?'
+   local url = 'http://'..host..':'..port..'/cgi-bin/elevation-profile.fcgi?'
 
    -- todo
    local function reverse(a)

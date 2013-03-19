@@ -1,10 +1,10 @@
-service elpro
+service elevation-profile
 {
 	disable		= no
 	type		= UNLISTED
 	socket_type	= stream
-	user		= elpro
-	server		= /usr/bin/elpro
+	user		= elevation-profile
+	server		= /usr/bin/elevation-profile
 	wait		= no
 	flags		= NODELAY KEEPALIVE
 	bind		= 127.0.0.1

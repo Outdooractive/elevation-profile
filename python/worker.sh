@@ -1,3 +1,3 @@
 #!/bin/sh
 cd ..
-exec ./elpro-bin
+exec ./elevation-profile

@@ -1,4 +1,4 @@
-Simple elevation profile (elpro) service similar to google's elevation
+Simple elevation profile service similar to google's elevation
 service [1].
 
 Demo installation using freeDEM [2] data:
@@ -20,15 +20,15 @@ http://karme.de/elevation-profile/demo?path=48.5,9|48.5,9.1&upsample=100&format=
 git repository at:
 http://karme.de/git/elevation-profile
 
-If http overhead is a problem you might wish to use the elpro tool
-providing a simple command line interface. You can use it either
-directly via pipes or in combination with good old (x)inetd [4,5] or
-socat [6]. For xinetd an example configuration is included and
-installed by default. The default configuration binds to 127.0.0.1
-only. If you want to limit access to a specific user on localhost you
-can try using ident and hosts.allow/deny (unfortunately the lua socket
-library doesn't support unix domain sockets). The lua client example
-in lua/ uses socat.
+If http overhead is a problem you might wish to use the
+elevation-profile tool providing a simple command line interface. You
+can use it either directly via pipes or in combination with good old
+(x)inetd [4,5] or socat [6]. For xinetd an example configuration is
+included and installed by default. The default configuration binds to
+127.0.0.1 only. If you want to limit access to a specific user on
+localhost you can try using ident and hosts.allow/deny (unfortunately
+the lua socket library doesn't support unix domain sockets). The lua
+client example in lua/ uses socat.
 
 [1] https://developers.google.com/maps/documentation/javascript/elevation
 [2] http://karme.de/freedem
