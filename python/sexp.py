@@ -45,7 +45,8 @@ symbol = pyparsing.Word(pyparsing.alphanums + "-./_:*+=")
 boolTrue = pyparsing.Literal("#t").setParseAction( pyparsing.replaceWith(True) )
 boolFalse = pyparsing.Literal("#f").setParseAction( pyparsing.replaceWith(False) )
 bool = boolTrue | boolFalse
-literal = real | decimal | qstring | symbol | bool
+nan = pyparsing.Literal("+nan.0").setParseAction( pyparsing.replaceWith(float("NaN")) )
+literal = nan | real | decimal | qstring | symbol | bool
 # define punctuation literals
 LPAR, RPAR = map(pyparsing.Suppress, "()")
 sexpList = pyparsing.Group(LPAR + pyparsing.ZeroOrMore(sexpReader) + RPAR)
