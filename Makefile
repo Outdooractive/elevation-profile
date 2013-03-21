@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.8
+VERSION  = 0.9.9
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -24,7 +24,7 @@ sysconfdir = $(prefix)/etc
 SCMDIR=`gauche-config --sitelibdir`
 
 SCMFILES=dem-gdal.scm elevation-profile-client.scm		\
-elevation-profile.scm elevation-profilews.scm format-json.scm	\
+elevation-profile.scm elevation-profile-ws.scm format-json.scm	\
 geod.scm google-elevation.scm runtime-compile.scm svg-plot.scm
 
 # not really needed
