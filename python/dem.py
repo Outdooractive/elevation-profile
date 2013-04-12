@@ -73,9 +73,6 @@ def getFunctions(host, port):
             raise Exception(r)
         return r
 
-    def pl4d(pl,dist):
-        return parseResult(remoteEval(["upsample-polyline->4d","wgs84",pl,dist]))
-    
     assertProtocol = assertProtocol2
     connect()
     return {"z":lambda pl: parseResult(remoteEval(["z"]+pl)),
