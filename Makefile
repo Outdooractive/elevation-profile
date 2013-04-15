@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.9
+VERSION  = 0.9.10
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -24,8 +24,9 @@ sysconfdir = $(prefix)/etc
 SCMDIR=`gauche-config --sitelibdir`
 
 SCMFILES=dem-gdal.scm elevation-profile-client.scm		\
-elevation-profile.scm elevation-profile-ws.scm format-json.scm	\
-geod.scm google-elevation.scm runtime-compile.scm svg-plot.scm
+elevation-profile-socket-client.scm elevation-profile.scm	\
+elevation-profile-ws.scm format-json.scm geod.scm		\
+google-elevation.scm runtime-compile.scm svg-plot.scm
 
 # not really needed
 SCMFILES+=google-elevation-client.scm
@@ -61,12 +62,13 @@ uninstall:
 
 dist:
 	mkdir $(PACKAGE)-$(VERSION) && \
-		cp -vr Makefile README INSTALL COPYING elevation-profile elevation-profile.conf \
+		cp -vr Makefile README INSTALL COPYING elevation-profile-repl elevation-profile.conf \
 			test-dem-gdal.scm \
 			elevation-profile.fcgi \
 			$(DATAFILES) $(SCMFILES) \
 			lua \
 			python \
+			test-scheme-tcp \
 			xinetd.d \
 			$(PACKAGE)-$(VERSION) \
 		&& tar czvf $(PACKAGE)-$(VERSION).tar.gz $(PACKAGE)-$(VERSION) \
