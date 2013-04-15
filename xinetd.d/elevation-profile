@@ -4,7 +4,7 @@ service elevation-profile
 	type		= UNLISTED
 	socket_type	= stream
 	user		= elevation-profile
-	server		= /usr/bin/elevation-profile
+	server		= /usr/bin/elevation-profile-repl
 	wait		= no
 	flags		= NODELAY KEEPALIVE
 	bind		= 127.0.0.1

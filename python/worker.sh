@@ -1,3 +1,3 @@
 #!/bin/sh
 cd ..
-exec ./elevation-profile
+exec ./elevation-profile-repl
