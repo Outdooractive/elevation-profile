@@ -46,7 +46,7 @@ installdirs:
 install: installdirs
 	$(INSTALL_DATA) $(SCMFILES) $(DESTDIR)$(SCMDIR)/
 	$(INSTALL_DATA) $(DATAFILES) $(DESTDIR)$(datadir)/$(PACKAGE)
-	$(INSTALL_PROGRAM) elevation-profile $(DESTDIR)$(bindir)/elevation-profile
+	$(INSTALL_PROGRAM) elevation-profile-repl $(DESTDIR)$(bindir)/elevation-profile-repl
 	# todo: really overwrite existing config?
 	$(INSTALL_DATA) elevation-profile.conf $(DESTDIR)$(sysconfdir)/elevation-profile
 	$(INSTALL_PROGRAM) elevation-profile.fcgi $(DESTDIR)$(libdir)/cgi-bin/
@@ -57,7 +57,7 @@ uninstall:
 	for i in $(SCMFILES); do rm -v $(DESTDIR)$(SCMDIR)/$$i; done
 	for i in $(DATAFILES); do rm -v $(DESTDIR)$(datadir)/$(PACKAGE)/$$i; done
 	-rmdir $(DESTDIR)$(datadir)/$(PACKAGE)
-	rm -v $(DESTDIR)$(bindir)/elevation-profile
+	rm -v $(DESTDIR)$(bindir)/elevation-profile-repl
 	rm -v  $(DESTDIR)/$(libdir)/cgi-bin/elevation-profile.fcgi
 
 dist:
