@@ -50,18 +50,6 @@
 		    pl)
                "|"))
 
-(define (json->list json)
-  (map (lambda(p)
-         (append
-          (list (assoc-ref (assoc-ref p "location") "lng")
-                (assoc-ref (assoc-ref p "location") "lat")
-                (assoc-ref p "elevation"))
-          (if (assoc-ref p "distance")
-            (list (assoc-ref p "distance"))
-	    ;; todo: should we calculate the distance on client side?
-            '())))
-       (assoc-ref (parse-json-string json) "results")))
-
 ;; todo: temporarily ignore or block sigpipe?!
 (define (elevation-profile-http-request server request-uri method params reader)
   (let1 tc (make <real-time-counter>)
@@ -70,6 +58,9 @@
                                 [(post)
                                  (http-post server
                                             request-uri
+                                            ;; ugly workaround for server side bug!
+                                            ;; now using workaround on server side => disabled
+                                            ;; (subseq (http-compose-query "" params) 1))
                                             params)]
                                 [(get)
                                  (http-get server
