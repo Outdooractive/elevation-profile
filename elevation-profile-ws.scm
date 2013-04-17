@@ -61,6 +61,9 @@
        ;; see also gauche-devel mailing list
        ;; Message-ID: <87ocjnhids.fsf@thialfi.karme.de>
        (with-module www.cgi
+         (with-output-to-port (current-error-port)
+           (lambda()
+             (print "WARNING: using http post hack for old gauche version")))
          (define (get-mime-parts part-handlers ctype clength inp)
            (define (part-ref info name)
              (rfc822-header-ref (ref info 'headers) name))
@@ -101,7 +104,81 @@
                       (string? (caddr clause)))
                  ;; backward compatibility - will be deleted soon
                  (list (cadr clause) :prefix (caddr clause)))
-                (else (cdr clause))))))))
+                (else (cdr clause)))))
+           
+           (define (get-handler action . opts)
+             (cond
+              ((not action) string-handler)
+              ((memq action '(file file+name))
+               (make-file-handler (get-keyword* :prefix opts
+                                                (build-path (temporary-directory)
+                                                            "gauche-cgi-"))
+                                  (eq? action 'file+name)
+                                  (get-keyword :mode opts #f)))
+              ((eq? action 'ignore) ignore-handler)
+              (else action)))
+           
+           ;; The value of content-disposition must be a properly quoted string
+           ;; according to RFC2183 and RFC2045.  However, IE sends a pathname including
+           ;; backslashes without quoting them.  As a compromise, we only consider
+           ;; backslash escape if the following character is either #\" or #\\.
+           ;; (This fix is provided by Tatsuya BIZENN).
+           (define (content-disposition-string input)
+             (read-char input)                   ; discard beginning DQUOTE
+             (let1 r (open-output-string :private? #t)
+               (define (finish) (get-output-string r))
+               (let loop ((c (read-char input)))
+                 (cond ((eof-object? c) (finish)) ; tolerate missing closing DQUOTE
+                       ((char=? c #\")  (finish)) ; discard ending DQUOTE
+                       ((char=? c #\\)
+                        (let1 c (read-char input)
+                          (cond ((eof-object? c) (finish)) ;; tolerate stray backslash
+                                (else
+                                 (unless (char-set-contains? #[\\\"] c)
+                                   (write-char #\\ r))
+                                 (write-char c r)
+                                 (loop (read-char input))))))
+                       (else (write-char c r) (loop (read-char input)))))))
+           
+           (define (parse-content-disposition field)
+             (if field
+               (rfc822-field->tokens field
+                                     `((#[\"] . ,content-disposition-string)
+                                       (,*rfc822-atext-chars* . ,rfc822-dot-atom)))
+               '()))
+           
+           (define (get-option optname optregex opts)
+             (cond [(member optname opts) => cadr]
+                   [(any (lambda (token)
+                           (and (string? token) (rxmatch optregex token)))
+                         opts) => (cut rxmatch-after <>)]
+                   [else #f]))
+           
+           (define (handle-part part-info inp)
+             (let* ([cd   (part-ref part-info "content-disposition")]
+                    [opts (parse-content-disposition cd)]
+                    [name (get-option "name=" #/^name=/ opts)]
+                    [filename (get-option "filename=" #/^filename=/ opts)])
+               (cond
+                ((not name)      ;; if no name is given, just ignore this part.
+                 (ignore-handler name filename part-info inp)
+                 #f)
+                ((not filename)  ;; this is not a file uploading field.
+                 (list name (string-handler name filename part-info inp)))
+                ((string-null? filename) ;; file field is empty
+                 (list name (ignore-handler name filename part-info inp)))
+                (else
+                 (let* ((action&opts (get-action&opts name))
+                        (handler (apply get-handler action&opts))
+                        (result (handler name filename part-info inp)))
+                   (list name result))))))
+           
+           (let* ((inp (if (and clength (<= 0 (x->integer clength)))
+                         (open-input-limited-length-port inp (x->integer clength))
+                         inp))
+                  (result (mime-parse-message inp `(("content-type" ,ctype))
+                                              handle-part)))
+             (filter-map (cut ref <> 'content) (ref result 'content))))))
 
 (define (create-context config)
   (let1 get-z (apply dem-stack->xy->z* config)
