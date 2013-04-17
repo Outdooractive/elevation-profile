@@ -1,3 +1,37 @@
+;;;
+;;; elevation profile web-service client
+;;;
+;;;   Copyright (c) 2012,2013 Jens Thiele <karme@karme.de>
+;;;   http post workaround in ifdef taken from gauche
+;;;   Copyright (c) 2000-2012  Shiro Kawai  <shiro@acm.org>
+;;;   
+;;;   Redistribution and use in source and binary forms, with or without
+;;;   modification, are permitted provided that the following conditions
+;;;   are met:
+;;;   
+;;;   1. Redistributions of source code must retain the above copyright
+;;;      notice, this list of conditions and the following disclaimer.
+;;;  
+;;;   2. Redistributions in binary form must reproduce the above copyright
+;;;      notice, this list of conditions and the following disclaimer in the
+;;;      documentation and/or other materials provided with the distribution.
+;;;  
+;;;   3. Neither the name of the authors nor the names of its contributors
+;;;      may be used to endorse or promote products derived from this
+;;;      software without specific prior written permission.
+;;;  
+;;;   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;;;   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;;;   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;;;   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;;;   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+;;;   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+;;;   TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+;;;   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+;;;   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+;;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;;;  
 (define-module elevation-profile-ws
   (use elevation-profile)
   (use www.cgi)
@@ -7,10 +41,58 @@
   (use gauche.sequence)
   (use svg-plot)
   (use sxml.serializer)
+  (use gauche.version)
   (export
    elevation-profile-ws-main))
 
 (select-module elevation-profile-ws)
+
+(ifdef (version<? (gauche-version) "0.9.1")
+       ;; ugly workaround for old gauche (debian/squeeze)
+       ;; see also gauche-devel mailing list
+       ;; Message-ID: <87ocjnhids.fsf@thialfi.karme.de>
+       (with-module www.cgi
+         (define (get-mime-parts part-handlers ctype clength inp)
+           (define (part-ref info name)
+             (rfc822-header-ref (ref info 'headers) name))
+
+           (define (make-file-handler prefix honor-origfile? mode)
+             (lambda (name filename part-info inp)
+               (receive (outp tmpfile) (sys-mkstemp prefix)
+                 (cgi-add-temporary-file tmpfile)
+                 (mime-retrieve-body part-info inp outp)
+                 (close-output-port outp)
+                 (when mode (sys-chmod tmpfile mode))
+                 (if honor-origfile?
+                   (list tmpfile filename)
+                   tmpfile))))
+
+           (define (string-handler name filename part-info inp)
+             (mime-body->string part-info inp))
+           
+           (define (ignore-handler name filename part-info inp)
+             (let loop ((ignore (read-line inp #t)))
+               (if (eof-object? ignore) #f (loop (read-line inp #t)))))
+           
+           (define (get-action&opts part-name)
+             (let1 clause (find (lambda (entry)
+                                  (or (eq? (car entry) #t)
+                                      (and (regexp? (car entry))
+                                           (rxmatch (car entry) part-name))
+                                      (and (list? (car entry))
+                                           (member part-name (map x->string (car entry))))
+                                      (string=? (x->string (car entry)) part-name)))
+                                part-handlers)
+               (cond
+                ((or (not clause)
+                     (not (pair? (cdr clause))))
+                 (list string-handler)) ;; default action
+                ((and (= (length clause) 3)
+                      (memq (cadr clause) '(file file+name))
+                      (string? (caddr clause)))
+                 ;; backward compatibility - will be deleted soon
+                 (list (cadr clause) :prefix (caddr clause)))
+                (else (cdr clause))))))))
 
 (define (create-context config)
   (let1 get-z (apply dem-stack->xy->z* config)
