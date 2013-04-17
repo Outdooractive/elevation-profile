@@ -47,6 +47,15 @@
 
 (select-module elevation-profile-ws)
 
+;; todo: there must be a better way!
+(define-macro (ifdef c x)
+  (cond [(boolean? c)
+         (if c x '#t)]
+        [else
+         `(ifdef ,(eval c
+                        (current-module) ;; ouch
+                        ) ,x)]))
+
 (ifdef (version<? (gauche-version) "0.9.1")
        ;; ugly workaround for old gauche (debian/squeeze)
        ;; see also gauche-devel mailing list
