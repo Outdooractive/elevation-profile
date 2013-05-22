@@ -234,9 +234,11 @@
 
 (define (cgi-elevation-profile context params)
   (hack
-   (let ((query (google-elevation-query params)))
-     ((assoc-ref `(("js"    . ,google-elevation-v3-out)
-		   ("sjs"   . ,google-elevation-simple-out)
+   (let ((query (google-elevation-query params))
+         ;; todo: restrict allowed values
+         (jscallback (cgi-get-parameter "callback" params :default "")))
+     ((assoc-ref `(("js"    . ,(cut google-elevation-v3-out jscallback <>))
+		   ("sjs"   . ,(cut google-elevation-simple-out jscallback))
 		   ("xml"   . ,(compose render-xml points->sxml))
 		   ("sxml"  . ,(compose render-sxml points->sxml))
 		   ("sexpr" . ,render-sexpr)

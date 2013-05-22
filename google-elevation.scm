@@ -36,6 +36,7 @@
   (use sxml.sxpath)
   (use gauche.sequence)
   (use www.cgi)
+  (use srfi-13)
   (export google-elevation-query
           google-elevation-v3-out
           google-elevation-simple-out))
@@ -82,27 +83,42 @@
 ;; todo: also in ...
 (define to-json (cut ->jsonf <> `((number . ,json-display-number))))
 
-(define (google-elevation-v3-out pl)
+(define (maybe-apply-jscallback jscallback json)
+  (if (string-null? jscallback)
+    json
+    (list
+     jscallback
+     " && "
+     jscallback
+     "("
+     json
+     ")")))
+
+(define (google-elevation-v3-out jscallback pl)
   (list (cgi-header :content-type "text/javascript")
-	(to-json
-	 `((status . "OK")
-	   (results . ,(map-to <vector>
-			       (lambda(p)
-				 (append
-				  `((location . ((lat . ,(ref p 1))
-						 (lng . ,(ref p 0))))
-				    (elevation . ,(ref p 2)))
-				  (if (> (size-of p) 3)
-				      `((distance . ,(ref p 3)))
-				      '())))
-			       pl))))))
+        (maybe-apply-jscallback
+         jscallback
+         (to-json
+          `((status . "OK")
+            (results . ,(map-to <vector>
+                                (lambda(p)
+                                  (append
+                                   `((location . ((lat . ,(ref p 1))
+                                                  (lng . ,(ref p 0))))
+                                     (elevation . ,(ref p 2)))
+                                   (if (> (size-of p) 3)
+                                     `((distance . ,(ref p 3)))
+                                     '())))
+                                pl)))))))
 
 ;; todo: not related to google api in any way
 ;; remove? rename?
-(define (google-elevation-simple-out pl)
+(define (google-elevation-simple-out jscallback pl)
   (list (cgi-header :content-type "text/javascript")
-	(to-json
-	 `((status . "OK")
-	   (results . ,(map-to <vector>
-			       (cut coerce-to <vector> <>)
-			       pl))))))
+        (maybe-apply-jscallback
+         jscallback
+         (to-json
+          `((status . "OK")
+            (results . ,(map-to <vector>
+                                (cut coerce-to <vector> <>)
+                                pl)))))))
