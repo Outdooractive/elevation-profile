@@ -94,7 +94,7 @@
                       (write sexp)
                       (newline)
                       (flush)
-                      (let1 r (read)
+                      (let1 r (read) ;; todo: security!
                         (when (eof-object? r)
                           (error r))
                         r))))
