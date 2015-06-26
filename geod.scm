@@ -54,7 +54,7 @@
     (declcode
      (.include "GeographicLib/Geodesic.hpp")
      "static const GeographicLib::Geodesic sphere(6378137,0);"
-     "static const GeographicLib::Geodesic* spheroid[]={&GeographicLib::Geodesic::WGS84, &sphere};"
+     "static const GeographicLib::Geodesic* spheroid[]={&GeographicLib::Geodesic::WGS84(), &sphere};"
      "double geod_direct(unsigned s,
 	                 double lat1, double lon1, double azi1, double s12,
 	                 double* lat2, double* lon2, double* azi2,
@@ -129,6 +129,7 @@
 
 (define geod-distance (compose cadr (cut geod-inverse <> <> <>)))
 
+;; todo: check for exact number?!
 (define (sample x)
   (map (lambda(i)
          (/ i (- x 1)))
