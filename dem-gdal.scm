@@ -817,7 +817,7 @@
       (list (permute l2 '(0 2))
             (permute l2 '(1 3))))))
 
-(define (nan-to-#f n)
+(define (nan-to-false n)
   (if (nan? n)
     #f
     n))
@@ -876,7 +876,7 @@
                                  (read-geo-pixel (lambda(x y)
                                                    (guard (e [(transform-error? e)
                                                               #f])
-                                                          (nan-to-#f (apply read-pixel (rasterpos x y)))))))
+                                                          (nan-to-false (apply read-pixel (rasterpos x y)))))))
                             (lambda(x y)
                               (if (not (rasterpos&bbox! x y rp box))
                                 (next x y)
@@ -902,7 +902,7 @@
                                                                        (read-geo-pixel (- cx 360.0) cy)
                                                                        (and (or (> cy 90.0) (< cy -90.0))
                                                                             (read-geo-pixel cx cy))))
-                                                              (nan-to-#f (next cx cy)))
+                                                              (nan-to-false (next cx cy)))
                                                         (set! (ref r rx) nv)
                                                         ;; failed to replace nan
                                                         (break (next x y))))))
