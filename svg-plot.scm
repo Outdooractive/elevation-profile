@@ -76,7 +76,7 @@
                       (size #f))
     (with-output-to-gnuplot
      (lambda()
-       (print "set terminal svg mouse" (if size (string-append " size " (string-join (map x->string size) ",")) ""))
+       (print "set terminal svg mouse" (if size (string-append " size " (string-join (map x->string size) ",")) "") " dynamic")
        (print "set style data linespoints")
        ;;(print "set grid")
        (when (procedure? hook) (hook))
