@@ -31,6 +31,10 @@ the lua socket library doesn't support unix domain sockets, otherwise
 I would change the default config to unix domain sockets). The lua
 client example in lua/ uses socat.
 
+Using apache2 I observed problems using mpm_event and I suggest to use
+mpm_prefork for now:
+a2dismod mpm_event ; a2enmod mpm_prefork
+
 [1] https://developers.google.com/maps/documentation/elevation/index
     https://developers.google.com/maps/documentation/javascript/elevation
 [2] http://karme.de/freedem
