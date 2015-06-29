@@ -28,7 +28,7 @@
 (assert (= (length (car *expected*)) 4))
 #?=(last (last *expected*))
 (assert (= (round->exact (last (last *expected*))) 584))
-        
+
 (define (request)
   (let1 r (upsample-polyline->4d *url* *polyline* 50)
     (equal? r *expected*)))
