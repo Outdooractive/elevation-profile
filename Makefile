@@ -64,6 +64,7 @@ dist:
 	mkdir $(PACKAGE)-$(VERSION) && \
 		cp -vr Makefile README INSTALL COPYING elevation-profile-repl elevation-profile.conf \
 			test-dem-gdal.scm \
+			stress-test-ws.scm \
 			elevation-profile.fcgi \
 			$(DATAFILES) $(SCMFILES) \
 			lua \
