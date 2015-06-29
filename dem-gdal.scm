@@ -61,7 +61,7 @@
 
 (select-module dem-gdal)
 
-(c-load '("gdal/gdal.h" "gdal/ogr_srs_api.h") :libs-cmd "gdal-config --libs")
+(c-load '("gdal/gdal.h" "gdal/ogr_srs_api.h") :libs-cmd "gdal-config --libs" :compiled-lib "gdal")
 
 ;; todo: hmm
 (CPLSetErrorHandler 0)
