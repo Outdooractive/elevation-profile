@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.20
+VERSION  = 0.9.21
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -42,6 +42,7 @@ installdirs:
 	$(INSTALL) -d $(DESTDIR)/$(sysconfdir)
 	$(INSTALL) -d $(DESTDIR)/$(sysconfdir)/xinetd.d
 	$(INSTALL) -d $(DESTDIR)/$(libdir)/cgi-bin
+	$(INSTALL) -d $(DESTDIR)/lib/systemd/system
 
 install: installdirs
 	$(INSTALL_DATA) $(SCMFILES) $(DESTDIR)$(SCMDIR)/
@@ -51,6 +52,8 @@ install: installdirs
 	$(INSTALL_DATA) elevation-profile.conf $(DESTDIR)$(sysconfdir)/elevation-profile
 	$(INSTALL_PROGRAM) elevation-profile.fcgi $(DESTDIR)$(libdir)/cgi-bin/
 	$(INSTALL_DATA) xinetd.d/elevation-profile $(DESTDIR)$(sysconfdir)/xinetd.d/elevation-profile
+	$(INSTALL_DATA) systemd/elevation-profile@.service $(DESTDIR)/lib/systemd/system/
+	$(INSTALL_DATA) systemd/elevation-profile.socket $(DESTDIR)/lib/systemd/system/
 
 # todo: should make uninstall remove config file?!
 uninstall:
@@ -71,6 +74,7 @@ dist:
 			python \
 			test-scheme-tcp \
 			xinetd.d \
+			systemd \
 			$(PACKAGE)-$(VERSION) \
 		&& tar czvf $(PACKAGE)-$(VERSION).tar.gz $(PACKAGE)-$(VERSION) \
 		&& rm -rf $(PACKAGE)-$(VERSION)

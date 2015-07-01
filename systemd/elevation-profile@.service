@@ -1,0 +1,8 @@
+[Unit]
+Description=elevation-profile per-connection server
+
+[Service]
+ExecStart=-/usr/bin/elevation-profile-repl
+StandardInput=socket
+User=elevation-profile
+KeepAlive=true
