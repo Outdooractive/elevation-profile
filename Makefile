@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.21
+VERSION  = 0.9.22
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -84,4 +84,4 @@ check:
 	./test-dem-gdal.scm -Fno-runtime-compile
 
 clean:
-	-rm -vf lores.tif N48E00* all.vrt* *~ python/*~ python/*.pyc
+	-rm -vf lores.tif N48E00* all.vrt* *~ python/*~ python/*.pyc systemd/*~
