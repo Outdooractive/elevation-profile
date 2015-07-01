@@ -4,6 +4,7 @@ Description=elevation-profile socket for per-connection servers
 [Socket]
 ListenStream=127.0.0.1:2223
 Accept=yes
+KeepAlive=true
 
 [Install]
 WantedBy=sockets.target
