@@ -87,7 +87,7 @@
                        ;;#?=(map (cut cast <number> <>) transform)
                        ;; (print #`"Origin = ,(ref transform 0), ,(ref transform 3)")
                        ;; (print #`"Pixel Size = ,(ref transform 1), ,(ref transform 5)")
-                       ))))
+                       #t))))
                dataset]
               [else
                (error "Unsupported format")])))))
