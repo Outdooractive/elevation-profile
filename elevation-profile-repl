@@ -1,9 +1,14 @@
 #!/bin/sh
 #| -*- mode: scheme; coding: utf-8; -*-
-# note: redirect stderr to /dev/null for inetd invokation
+# newer gdal versions use too much cache (5% of available RAM)
+# see also:
+# https://trac.osgeo.org/gdal/wiki/ConfigOptions#GDAL_CACHEMAX
+# use old default of 40MB
+export GDAL_CACHEMAX=40
 if [ "x$1" = "x-v" ]; then
 exec gosh -I. -- $0 "$@"
 else
+# note: redirect stderr to /dev/null for inetd invokation
 exec gosh -I. -- $0 "$@" 2>/dev/null
 fi
 |#

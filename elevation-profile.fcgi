@@ -2,6 +2,11 @@
 #| -*- mode: scheme; coding: utf-8; -*-
 PATH=$PATH:/usr/bin
 export PATH
+# newer gdal versions use too much cache (5% of available RAM)
+# see also:
+# https://trac.osgeo.org/gdal/wiki/ConfigOptions#GDAL_CACHEMAX
+# use old default of 40MB
+export GDAL_CACHEMAX=40
 exec gosh -I. -- $0 "$@"
 |#
 
