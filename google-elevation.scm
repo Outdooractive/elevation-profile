@@ -95,7 +95,8 @@
      ")")))
 
 (define (google-elevation-v3-out jscallback pl)
-  (list (cgi-header :content-type "text/javascript")
+  (list (cgi-header :content-type "text/javascript"
+		    :|Access-Control-Allow-Origin| "*")
         (maybe-apply-jscallback
          jscallback
          (to-json
@@ -114,7 +115,8 @@
 ;; todo: not related to google api in any way
 ;; remove? rename?
 (define (google-elevation-simple-out jscallback pl)
-  (list (cgi-header :content-type "text/javascript")
+  (list (cgi-header :content-type "text/javascript"
+		    :|Access-Control-Allow-Origin| "*")
         (maybe-apply-jscallback
          jscallback
          (to-json
