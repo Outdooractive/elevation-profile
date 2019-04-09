@@ -42,6 +42,7 @@
   (use svg-plot)
   (use sxml.serializer)
   (use gauche.version)
+  (use rfc.json)
   (export
    elevation-profile-ws-main))
 
@@ -216,6 +217,21 @@
                          (map (cut permute <> '(3 2)) pl)
                          (map-with-index (lambda(idx x) (list idx (ref x 2))) pl))))))))
 
+(define (render-geojson pl)
+  (list (cgi-header :content-type "text/javascript"
+		    :|Access-Control-Allow-Origin| "*")
+	(construct-json-string
+	 `(("header" . (("status" . "ok")))
+	   ("answer" . (("type" . "elevation")
+			("contents" . #((("type" . "FeatureCollection")
+					 ("features" . #((("type" . "Feature")
+							  ("properties" . ())
+							  ("geometry" . (("type" . "MultiPoint")
+									 ("coordinates" . ,(map-to <vector>
+												   (lambda(p)
+												     (subseq (list->vector p) 0 3))
+												   pl))))))))))))))))
+
 (define (points->sxml pl)
   `(result . ,(map (lambda(p)
 		     (list 'p (string-join (map x->string p) ",")))
@@ -237,12 +253,13 @@
    (let ((query (google-elevation-query params))
          ;; todo: restrict allowed values
          (jscallback (cgi-get-parameter "callback" params :default "")))
-     ((assoc-ref `(("js"    . ,(cut google-elevation-v3-out jscallback <>))
-		   ("sjs"   . ,(cut google-elevation-simple-out jscallback <>))
-		   ("xml"   . ,(compose render-xml points->sxml))
-		   ("sxml"  . ,(compose render-sxml points->sxml))
-		   ("sexpr" . ,render-sexpr)
-		   ("svg"   . ,render-svg))
+     ((assoc-ref `(("js"      . ,(cut google-elevation-v3-out jscallback <>))
+		   ("sjs"     . ,(cut google-elevation-simple-out jscallback <>))
+		   ("xml"     . ,(compose render-xml points->sxml))
+		   ("sxml"    . ,(compose render-sxml points->sxml))
+		   ("sexpr"   . ,render-sexpr)
+		   ("svg"     . ,render-svg)
+		   ("geojson" . ,render-geojson))
 		 (cgi-get-parameter "format" params :default "js"))
       (case (car query)
 	[(path-elevation-sample)
