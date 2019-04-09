@@ -1,7 +1,7 @@
 ;;;
 ;;; runtime compilation / loading of c(ise)-code
 ;;;
-;;;   Copyright (c) 2011 Jens Thiele <karme@karme.de>
+;;;   Copyright (c) 2011-2019 Jens Thiele <karme@karme.de>
 ;;;   
 ;;;   Redistribution and use in source and binary forms, with or without
 ;;;   modification, are permitted provided that the following conditions
@@ -36,7 +36,6 @@
 ;; notes:
 ;; - using gauche 0.9 modules marked as *EXPERIMENTAL* => maybe will
 ;;   break with other versions!
-;; - assumes current directory is in load-path
 ;; - each compilation loads a module that is never unloaded
 ;; - likely doesn't work on windows
 ;; - there is also dyncomp
@@ -68,20 +67,7 @@
 
 ;; todo: name is somewhat misleading/ambiguous / should be in file.util?
 (define (with-temporary-directory thunk)
-  (define (mk-random-tmpdir)
-    (let loop ((try 0))
-      (guard (e
-              [(<system-error> e)
-               (if (< try 10000)
-                 (loop (+ try 1))
-                 (raise e))])
-             (let1 r (string-append (temporary-directory)
-                                    "/grtc" ;; todo: add pattern keyword
-                                    (random-string))
-               (sys-mkdir r #o0700)
-               r))))
-  
-  (let1 dir (mk-random-tmpdir)
+  (let1 dir (sys-mkdtemp (string-append (temporary-directory) "/grtc"))
     (unwind-protect
      (thunk dir)
      (guard (e
@@ -111,15 +97,6 @@
 ;;                           :cppflags "-v -fverbose-asm -O3 -S")
 ;;   (cat (path-swap-extension c-file ".o")))
 
-;; todo: there must be a better way!
-(define-macro (ifdef c x)
-  (cond [(boolean? c)
-         (if c x '#t)]
-        [else
-         `(ifdef ,(eval c
-                        (current-module) ;; ouch
-                        ) ,x)]))
-
 (define (%compile-and-load module stub imports . args)
   ;; todo
   (define (pprint x)
@@ -139,11 +116,14 @@
           (error "couldn't create module name")]))))
   
   (with-temporary-directory
-   ;; todo: really change to that directory?! likely bad idea
-   ;; note: didn't manage to tell cgen-precompile where to put the c-file
-   (cut with-current-directory
-        <>
-        (lambda()
+   (lambda(tmpdir)
+     ;; todo: really change to that directory?! likely bad idea
+     ;; note: didn't manage to tell cgen-precompile to put the c-file
+     ;; into different directory
+     ;; (at some point sys-basename is used on file named passed via :out.c)
+     (with-current-directory
+      tmpdir
+      (lambda()
           (let* ((new-mod  (new-module-name))
                  (scm-file #`",|new-mod|.scm")
                  (c-file   #`",|new-mod|.c")
@@ -159,15 +139,11 @@
                      . ,stub)))
             ;; (cat scm-file)
             ;; create .c and .sci from .scm
-            ;; hackish workaround for bug in unpatched gauche 0.9.2
-            ;; s.a. upstream commit
-            ;; 5e44a7cce57d7320fce2db985f1be82d612c275c
-            (ifdef (version=? "0.9.2" (gauche-version))
-                   (let1 c (with-module gauche.cgen.precomp (current-tmodule-class))
-                     (when (and (member 'modules (map car (ref c 'slots)))
-                                (not (null? (class-slot-ref c 'modules))))
-                       (class-slot-set! c 'modules (list)))))
-            (cgen-precompile scm-file :ext-initializer #t)
+            (cgen-precompile scm-file
+			     :ext-initializer #t
+			     :out.c c-file
+			     :out.sci sci-file
+			     :dso-name (string-append tmpdir "/" so-file))
 
             ;;(cat #?=c-file)
 
@@ -186,12 +162,12 @@
                                args))))
             ;; (cat sci-file)
             (for-each (cut eval <> module)
-                      `((load ,sci-file)
+                      `((load ,sci-file :paths (list ,tmpdir))
                         (import ,|new-mod|)))
             (for-each sys-unlink (list c-file sci-file scm-file))
             ;; todo: on windows you can't delete libraries in use?
             (gauche-package-clean new-mod (list c-file))
-            new-mod)))))
+            new-mod))))))
 
 ;; todo:
 ;; - be closer to c-wrapper c-load api?
