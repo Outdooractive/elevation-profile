@@ -228,8 +228,8 @@
 							  ("properties" . ())
 							  ("geometry" . (("type" . "MultiPoint")
 									 ("coordinates" . ,(map-to <vector>
-												   (lambda(p)
-												     (subseq (list->vector p) 0 3))
+												   (lambda (p)
+												     (vector (car p) (cadr p) (caddr p)))
 												   pl))))))))))))))))
 
 (define (points->sxml pl)
