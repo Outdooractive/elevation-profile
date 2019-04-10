@@ -41,8 +41,7 @@
   (use sxml.serializer)
   (use gauche.version)
   (use rfc.json)
-  (export
-   elevation-profile-ws-main))
+  (export elevation-profile-ws-main))
 
 (select-module elevation-profile-ws)
 
