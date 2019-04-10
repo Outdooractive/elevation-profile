@@ -136,6 +136,8 @@
 	 (error "todo")])))))
 
 (define (elevation-profile-ws-main config . args)
+  (when (version<? (gauche-version) "0.9.1")
+    (error "gauche too old"))
   (when (eq? (port-buffering (current-error-port)) :none)
     (set! (port-buffering (current-error-port)) :line))
   ;; todo: why? too late anyway?!
