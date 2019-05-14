@@ -81,6 +81,23 @@
                          (map (cut permute <> '(3 2)) pl)
                          (map-with-index (lambda(idx x) (list idx (ref x 2))) pl))))))))
 
+;; todo: also in ...
+(define (round-at-func p)
+  (let* ((x (expt 10 p))
+         ;; gauche uses ieee 64 bit double with 53 bits mantissa
+         ;; => calculate smallest number where ulp(number) >= 1/10^p
+         (rmax (expt 2 (ceiling (- 52 (/ (* (log 10) p) (log 2)))))))
+    (lambda(n)
+      ;; if ulp(n) is bigger than wanted precision there is no point in rounding at all
+      (if (>= (abs n) rmax)
+        n
+        (let1 r (/. (round (*. n x)) x)
+          (if (integer? r)
+            (exact r)
+            r))))))
+
+(define round-z (round-at-func 2))
+
 (define (render-geojson pl)
   (list (cgi-header :content-type "text/javascript"
 		    :|Access-Control-Allow-Origin| "*")
@@ -93,7 +110,9 @@
 							  ("geometry" . (("type" . "MultiPoint")
 									 ("coordinates" . ,(map-to <vector>
 												   (lambda (p)
-												     (vector (car p) (cadr p) (caddr p)))
+												     (vector (car p)
+													     (cadr p)
+													     (round-z (caddr p))))
 												   pl))))))))))))))))
 
 (define (points->sxml pl)
