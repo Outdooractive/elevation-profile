@@ -1,0 +1,9 @@
+[Unit]
+Description = elevation-profile FastCGI Socket (instance %i)
+
+[Socket]
+ListenStream = 127.0.0.1:%i
+NoDelay=true
+
+[Install]
+WantedBy = sockets.target

@@ -1,0 +1,11 @@
+[Unit]
+Description = elevation-profile FastCGI service (instance %i)
+
+[Service]
+User = fcgi-elevation-profile
+DynamicUser=1
+ExecStart = /usr/lib/cgi-bin/elevation-profile.fcgi
+StandardOutput = socket
+StandardInput = socket
+StandardError = journal
+Restart = always
