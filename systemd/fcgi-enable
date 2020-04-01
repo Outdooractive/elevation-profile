@@ -1,0 +1,22 @@
+#!/bin/bash
+for i in {920..922}; do
+    systemctl enable fcgi-elevation-profile@$i.socket
+done
+a2dismod fastcgi
+a2dismod fcgid
+a2enmod proxy
+a2enmod proxy_fcgi
+a2enmod proxy_balancer
+a2enmod lbmethod_byrequests
+systemctl daemon-reload
+for i in {920..922}; do
+    systemctl start fcgi-elevation-profile@$i.socket
+done
+cat <<EOF > /etc/apache2/conf-available/elevation-profile.conf
+ProxyPass "/cgi-bin/elevation-profile.fcgi" "balancer://elevationfcgiproxy/"
+<Proxy "balancer://elevationfcgiproxy/">
+    BalancerMember "fcgi://localhost:920"
+    BalancerMember "fcgi://localhost:921"
+    BalancerMember "fcgi://localhost:922"
+</Proxy>
+EOF
