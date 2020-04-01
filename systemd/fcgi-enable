@@ -1,4 +1,6 @@
 #!/bin/bash
+cp -v fcgi-elevation-profile@.service /lib/systemd/system
+cp -v fcgi-elevation-profile@.socket /lib/systemd/system
 for i in {920..922}; do
     systemctl enable fcgi-elevation-profile@$i.socket
 done
@@ -20,3 +22,5 @@ ProxyPass "/cgi-bin/elevation-profile.fcgi" "balancer://elevationfcgiproxy/"
     BalancerMember "fcgi://localhost:922"
 </Proxy>
 EOF
+a2enconf elevation-profile
+service apache2 restart
