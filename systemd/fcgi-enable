@@ -9,13 +9,13 @@ a2dismod fcgid
 a2enmod proxy
 a2enmod proxy_fcgi
 a2enmod proxy_balancer
-a2enmod lbmethod_byrequests
+a2enmod lbmethod_bybusyness
 systemctl daemon-reload
 for i in {920..922}; do
     systemctl start fcgi-elevation-profile@$i.socket
 done
 cat <<EOF > /etc/apache2/conf-available/elevation-profile.conf
-ProxyPass "/cgi-bin/elevation-profile.fcgi" "balancer://elevationfcgiproxy/"
+ProxyPass "/cgi-bin/elevation-profile.fcgi" "balancer://elevationfcgiproxy/" lbmethod=bybusyness
 <Proxy "balancer://elevationfcgiproxy/">
     BalancerMember "fcgi://localhost:920"
     BalancerMember "fcgi://localhost:921"
