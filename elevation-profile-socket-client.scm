@@ -128,4 +128,4 @@
   ((assoc-ref (get-functions service) 'upsample-polyline->4d) pl upsample))
 
 (define (sample-polyline->4d service pl samples . args)
-  ((assoc-ref (get-functions service) 'sample-polyline->4d) pl upsample))
+  ((assoc-ref (get-functions service) 'sample-polyline->4d) pl samples))
