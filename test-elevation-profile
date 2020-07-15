@@ -1,0 +1,214 @@
+#!/bin/sh
+#| -*- mode: scheme; coding: utf-8; -*- |#
+:; exec gosh -- $0 "$@"
+
+(use elevation-profile-client)
+(use elevation-profile-socket-client :prefix socket:)
+(use util.list)
+(use gauche.sequence)
+(use rfc.json)
+(use gauche.test)
+(use rfc.http)
+
+(define *url* '("localhost" "/cgi-bin/elevation-profile.fcgi"))
+(define *socket* '(inet "localhost" 2223))
+
+(debug-print-width 4000)
+
+(define (encode-polyline pl)
+  (string-join (map (lambda(p)
+		      (string-join (map x->string
+					(permute p '(1 0)))
+                                   ","))
+		    pl)
+               "|"))
+
+(define (json-ref json x :optional (default #f))
+  (if (null? x)
+    json
+    (cond [(number? (car x))
+	   (if (and (<= 0 (car x))
+		    (< (car x) (vector-length json)))
+	     (json-ref (vector-ref json (car x)) (cdr x) default)
+	     default)]
+	  [(string? (car x))
+	   (if-let1 p (assoc (car x) json string=?)
+		    (json-ref (cdr p) (cdr x) default)
+		    default)]
+	  [(and (eq? (car x) 'last) (vector? json))
+	   (if (zero? (vector-length json))
+	     default
+	     (json-ref (vector-last json) (cdr x) default))]
+	  [(and (eq? (car x) 'second-to-last) (vector? json)) ;; todo: better name?
+	   (if (< (vector-length json) 2)
+	     default
+	     (json-ref (vector-ref json (- (vector-length json) 2)) (cdr x) default))]
+	  [(symbol? (car x))
+	   (if-let1 p (assoc (symbol->string (car x)) json string=?)
+		    (json-ref (cdr p) (cdr x) default)
+		    default)]
+	  [else
+	   (error "unsupported path elem" (car x))])))
+
+(define (main args)
+  (test-start "elevation-profile")
+  (test* "polyline->3d"
+         #t
+         (< 320 (~ (polyline->3d *url* '((9 48.5))) 0 2) 340))
+  (test* "upsample-polyline->4d"
+         #t
+         (let1 r (upsample-polyline->4d *url* '((9 48.5) (9.01 48.5)) 100)
+           (and (every (cut = <> 4) (map length r))
+                (zero? (~ r 0 3))
+                (< 730 (~ (last r) 3) 750)
+                (apply < (map (cut ~ <> 3) r))
+                (< 300 (apply min (map (cut ~ <> 2) r)) 400)
+                (< 300 (apply max (map (cut ~ <> 2) r)) 400))))
+  (test* "sample-polyline->4d"
+         #t
+         (let1 r (sample-polyline->4d *url* '((9 48.5) (9.01 48.5)) 9)
+           (and (every (cut = <> 4) (map length r))
+                (zero? (~ r 0 3))
+                (< 730 (~ (last r) 3) 750)
+                (apply < (map (cut ~ <> 3) r))
+                (< 300 (apply min (map (cut ~ <> 2) r)) 400)
+                (< 300 (apply max (map (cut ~ <> 2) r)) 400))))
+
+  (test* "socket:polyline->3d"
+         #t
+         (< 320 (~ (socket:polyline->3d *socket* '((9 48.5))) 0 2) 340))
+  (test* "socket:upsample-polyline->4d"
+         #t
+         (let1 r (socket:upsample-polyline->4d *socket* '((9 48.5) (9.01 48.5)) 100)
+           (and (every (cut = <> 4) (map length r))
+                (zero? (~ r 0 3))
+                (< 730 (~ (last r) 3) 750)
+                (apply < (map (cut ~ <> 3) r))
+                (< 300 (apply min (map (cut ~ <> 2) r)) 400)
+                (< 300 (apply max (map (cut ~ <> 2) r)) 400))))
+  (test* "socket:sample-polyline->4d"
+         #t
+         (let1 r (socket:sample-polyline->4d *socket* '((9 48.5) (9.01 48.5)) 9)
+           (and (every (cut = <> 4) (map length r))
+                (zero? (~ r 0 3))
+                (< 730 (~ (last r) 3) 750)
+                (apply < (map (cut ~ <> 3) r))
+                (< 300 (apply min (map (cut ~ <> 2) r)) 400)
+                (< 300 (apply max (map (cut ~ <> 2) r)) 400))))
+
+  ;;; test web service directly
+  
+  (test* "web service js output locations"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((locations ,(encode-polyline '((9 48.5))))
+                                                          (format "js"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (string=? (assoc-ref json "status") "OK")
+                  (< 320 (json-ref json '(results 0 elevation)) 340)))))
+  (test* "web service js output upsample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (upsample 100)
+                                                          (format "js"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (assoc-ref json "status") "OK")
+                       (let1 z (map (lambda(p) (assoc-ref p "elevation")) (assoc-ref json "results"))
+                         (and (< 300 (apply min z) 400)
+                              (< 300 (apply max z) 400))))))))
+  (test* "web service js output sample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (samples 9)
+                                                          (format "js"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (assoc-ref json "status") "OK")
+                       (let1 z (map (lambda(p) (assoc-ref p "elevation")) (assoc-ref json "results"))
+                         (and (< 300 (apply min z) 400)
+                              (< 300 (apply max z) 400))))))))
+
+  (test* "web service geojson output locations"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((locations ,(encode-polyline '((9 48.5))))
+                                                          (format "geojson"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (string=? (json-ref json '(header status)) "ok")
+                  (< 320 (json-ref json '(answer contents 0 features 0 geometry coordinates 0 2)) 340)))))
+  (test* "web service geojson output upsample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (upsample 100)
+                                                          (format "geojson"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (json-ref json '(header status)) "ok")
+                       (let1 z (map (cut ~ <> 2) (json-ref json '(answer contents 0 features 0 geometry coordinates)))
+                         (and (< 300 (apply min z) 400)
+                              (< 300 (apply max z) 400))))))))
+  (test* "web service geojson output sample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (samples 9)
+                                                          (format "geojson"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (json-ref json '(header status)) "ok")
+                       (let1 z (map (cut ~ <> 2) (json-ref json '(answer contents 0 features 0 geometry coordinates)))
+                         (and (< 300 (apply min z) 400)
+                              (< 300 (apply max z) 400))))))))
+
+  (test* "web service geojson debug output locations"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((locations ,(encode-polyline '((9 48.5))))
+                                                          (format "geojson")
+                                                          (debug "1"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (string=? (json-ref json '(header status)) "ok")
+                  (= (size-of (json-ref json '(answer contents 0 features 0 geometry coordinates 0))) 4)))))
+  (test* "web service geojson debug output upsample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (upsample 100)
+                                                          (format "geojson")
+                                                          (debug "1"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (json-ref json '(header status)) "ok")
+                       (every (cut = <> 5)
+                              (map size-of (json-ref json '(answer contents 0 features 0 geometry coordinates)))))))))
+
+  (test* "web service geojson debug output sample"
+         #t
+         (receive (status headers body)
+             (http-get (car *url*)
+                       (http-compose-query (cadr *url*) `((path ,(encode-polyline '((9 48.5) (9.01 48.5))))
+                                                          (samples 9)
+                                                          (format "geojson")
+                                                          (debug "1"))))
+           (and (string=? status "200")
+                (let1 json (parse-json-string body)
+                  (and (string=? (json-ref json '(header status)) "ok")
+                       (every (cut = <> 5)
+                              (map size-of (json-ref json '(answer contents 0 features 0 geometry coordinates)))))))))
+(test-end)
+  0)

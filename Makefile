@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.31
+VERSION  = 0.9.32
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
@@ -48,6 +48,7 @@ install: installdirs
 	$(INSTALL_DATA) $(SCMFILES) $(DESTDIR)$(SCMDIR)/
 	$(INSTALL_DATA) $(DATAFILES) $(DESTDIR)$(datadir)/$(PACKAGE)
 	$(INSTALL_PROGRAM) elevation-profile-repl $(DESTDIR)$(bindir)/elevation-profile-repl
+	$(INSTALL_PROGRAM) test-elevation-profile $(DESTDIR)$(bindir)/test-elevation-profile
 	# todo: really overwrite existing config?
 	$(INSTALL_DATA) elevation-profile.conf $(DESTDIR)$(sysconfdir)/elevation-profile
 	$(INSTALL_PROGRAM) elevation-profile.fcgi $(DESTDIR)$(libdir)/cgi-bin/
