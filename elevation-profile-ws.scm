@@ -153,8 +153,8 @@
 		   ("sxml"    . ,(compose render-sxml points->sxml))
 		   ("sexpr"   . ,render-sexpr)
 		   ("svg"     . ,render-svg)
-		   ("geojson" . ,(cut render-geojson <> debug))
-		 (cgi-get-parameter "format" params :default "js"))
+		   ("geojson" . ,(cut render-geojson <> debug)))
+                 (cgi-get-parameter "format" params :default "js"))
       (case (car query)
 	[(path-elevation-sample)
 	 (apply (ref context (string->symbol (string-append "sample-polyline->4d" (if debug "-debug" "")))) (cdr query))]
