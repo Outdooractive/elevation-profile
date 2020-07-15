@@ -67,6 +67,7 @@ uninstall:
 dist:
 	mkdir $(PACKAGE)-$(VERSION) && \
 		cp -vr Makefile README INSTALL COPYING elevation-profile-repl elevation-profile.conf \
+			test-elevation-profile \
 			test-dem-gdal.scm \
 			stress-test-ws.scm \
 			elevation-profile.fcgi \
