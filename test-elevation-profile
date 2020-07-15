@@ -62,8 +62,8 @@
                 (zero? (~ r 0 3))
                 (< 730 (~ (last r) 3) 750)
                 (apply < (map (cut ~ <> 3) r))
-                (< 300 #?=(apply min (map (cut ~ <> 2) r)) 500)
-                (< 300 #?=(apply max (map (cut ~ <> 2) r)) 500))))
+                (< 300 (apply min (map (cut ~ <> 2) r)) 500)
+                (< 300 (apply max (map (cut ~ <> 2) r)) 500))))
   (test* "sample-polyline->4d"
          #t
          (let1 r (sample-polyline->4d *url* '((9 48.5) (9.01 48.5)) 9)
@@ -76,7 +76,7 @@
 
   (test* "socket:polyline->3d"
          #t
-         (< 320 #?=(~ (socket:polyline->3d *socket* '((9 48.5))) 0 2) 420))
+         (< 320 (~ (socket:polyline->3d *socket* '((9 48.5))) 0 2) 420))
   (test* "socket:upsample-polyline->4d"
          #t
          (let1 r (socket:upsample-polyline->4d *socket* '((9 48.5) (9.01 48.5)) 100)
