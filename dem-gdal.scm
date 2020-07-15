@@ -54,9 +54,12 @@
   (use runtime-compile)
   (use binary.pack)
   ;;(use sxml.adaptor)
+  (use geod)
   (export dem->xy->z   
           dem->xy-project->z
+          dem->xy-project->z-debug
           dem-stack->xy->z
+          dem-stack->xy->z-debug
           ))
 
 (select-module dem-gdal)
@@ -924,6 +927,110 @@
             ((nearest)   (xy->z (lambda(u v rows) (ref* rows 0 0)) raster-pos->1x1-box 1 1))
             (else (error "Unknown interpolation:" interpolation))))))))
 
+(define (dem->xy-project->z-debug projection name . args)
+  (let-keywords args ((next (lambda _ (values +nan.0 +nan.0)))
+                      (interpolation 'bi-cubic)
+                      (band 1))
+                (let* ((dataset (gdal-open-dataset name))
+                       (band (gdal-open-band dataset band)))
+                  (let ((width (GDALGetRasterBandXSize band))
+                        (height (GDALGetRasterBandYSize band))
+                        (osr (osr-from-dataset dataset)))
+                    (let1 xy->z-debug (lambda(fi get-box box-width box-height)
+                                        (let ((rasterpos (get-rasterpos projection dataset)) ;; todo: get rid of rasterpos
+                                              (rp (make-f64vector 2))
+                                              (box (make-s64vector 4))
+                                              (rasterpos&bbox! (get-rasterpos&bbox! projection dataset get-box width height))
+                                              ;; todo:
+                                              ;; - only what I want if projection is a geographic cs?
+                                              (rasterpos⁻¹ (apply compose
+                                                                  (reverse
+                                                                   (filter (lambda(f) (not (eq? f identity)))
+                                                                           (list
+                                                                            (get-geotransform dataset)
+                                                                            (gdal-get-projection⁻¹ dataset)
+                                                                            (if (not (string-null? projection))
+                                                                              (osr-transform (OSRCloneGeogCS osr)
+                                                                                             (osr-from-user-input projection))
+                                                                              identity)
+                                                                            (cut subseq <> 0 2))))))
+                                              (read-row! (get-gdal-read-band-row! band (gdal-band-nodata band)))
+                                              (rows (map (lambda(y) (make-f32vector box-width)) (iota box-height)))
+                                              (geographic-dataset? (osr-is-geographic? osr)))
+                                          (let ((read-row (lambda(y xs xe)
+                                                            (let1 row (make-f32vector (- xe xs))
+                                                              (read-row! row y xs xe)
+                                                              row)))
+                                                (read-box! (lambda()
+                                                             (let ((start (s64vector-ref box 0))
+                                                                   (end   (s64vector-ref box 2))
+                                                                   (y (s64vector-ref box 1))
+                                                                   (r 0))
+                                                               (dotimes (idx box-height)
+                                                                 (inc! r (read-row! (ref rows idx) (+ y idx) start end)))
+                                                               r)))
+                                                )
+                                            (let* ((read-pixel (lambda(x y)
+                                                                 (let1 x (round->exact x)
+                                                                   (f32vector-ref (read-row (round->exact y) x (+ x 1)) 0))))
+                                                   (read-geo-pixel (lambda(x y)
+                                                                     (guard (e [(transform-error? e)
+                                                                                #f])
+                                                                            (nan-to-false (apply read-pixel (rasterpos x y)))))))
+                                              (lambda(x y)
+                                                (if (not (rasterpos&bbox! x y rp box))
+                                                  (next x y)
+                                                  (let* ((nans (read-box!))
+                                                         (c (map floor (list (f64vector-ref rp 0) (f64vector-ref rp 1))))
+                                                         (xres (geod-distance 'wgs84 (rasterpos⁻¹ c) (rasterpos⁻¹ (map + c '(1 0)))))
+                                                         (yres (geod-distance 'wgs84 (rasterpos⁻¹ c) (rasterpos⁻¹ (map + c '(0 1)))))
+                                                         (res (max xres yres)))
+                                                    (cond [(= nans (* box-width box-height))
+                                                           (next x y)]
+                                                          [(> nans 0)
+                                                           ;; try to replace nan
+                                                           ;; todo: maybe split into geographic and non-geographic case?
+                                                           (call/cc
+                                                            (lambda(break)
+                                                              (for-each-with-index
+                                                               (lambda(ry r)
+                                                                 (for-each-with-index
+                                                                  (lambda(rx v)
+                                                                    (when (nan? v)
+                                                                      (receive (cx cy)
+                                                                          (apply values (rasterpos⁻¹ (list (+ (s64vector-ref box 0) rx)
+                                                                                                           (+ (s64vector-ref box 1) ry))))
+                                                                        (let1 nv (and geographic-dataset?
+                                                                                      (or (read-geo-pixel (+ cx 360.0) cy)
+                                                                                          (read-geo-pixel (- cx 360.0) cy)
+                                                                                          (and (or (> cy 90.0) (< cy -90.0))
+                                                                                               (read-geo-pixel cx cy))))
+                                                                          (if nv
+                                                                            (set! (ref r rx) nv)
+                                                                            (let1 next-value (values->list (next cx cy))
+                                                                              (cond [(nan-to-false (car next-value))
+                                                                                     (set! (ref r rx) (car next-value))
+                                                                                     (set! res (max res (cadr next-value)))]
+                                                                                    [else
+                                                                                     ;; failed to replace nan
+                                                                                     (break (next x y))])))))))
+                                                                  r))
+                                                               rows)
+                                                              ;; (assert (not (any (cut find nan? <>) rows)))
+                                                              (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
+                                                                (values (fi u v rows)
+                                                                        res))))]
+                                                          [else
+                                                           ;; (assert (zero? nans))
+                                                           (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
+                                                             (values (fi u v rows)
+                                                                     res))]))))))))
+                      (case interpolation
+                        ((bi-cubic)  (xy->z-debug interp-bicubic raster-pos->4x4-box 4 4))
+                        ((bi-linear) (xy->z-debug interp-bilinear raster-pos->2x2-box 2 2))
+                        ((nearest)   (xy->z-debug (lambda(u v rows) (ref* rows 0 0)) raster-pos->1x1-box 1 1))
+                        (else (error "Unknown interpolation:" interpolation))))))))
+
 ;; return function to get z value at position x y (using coordinate system of the dataset)
 (define (dem->xy->z name . args)
   (apply dem->xy-project->z (append (list "" name) args)))
@@ -943,4 +1050,17 @@
               (error ":next only allowed in last element"))
             (apply dem->xy-project->z (cons projection (append n (list :next o)))))
           (apply dem->xy-project->z (cons projection (car l)))
+          (cdr l))))
+
+(define (dem-stack->xy->z-debug projection dem-stack)
+  (let1 l (reverse dem-stack)
+    (fold (lambda(n o)
+            ;; note: maybe we should use delete-keyword on n instead
+            ;; of assuming let-keywords takes the last value
+            ;; even better: throw an error if there is a next keyword!
+            ;; there is no such thing as keyword-exists?
+            (when (keyword-exists? :next (cdr n))
+              (error ":next only allowed in last element"))
+            (apply dem->xy-project->z-debug (cons projection (append n (list :next o)))))
+          (apply dem->xy-project->z-debug (cons projection (car l)))
           (cdr l))))

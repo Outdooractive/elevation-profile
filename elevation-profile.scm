@@ -37,9 +37,13 @@
   (use dem-gdal)
   (use geod)
   (export dem-stack->xy->z*
+          dem-stack->xy->z-debug*
           get-polyline->3d
+          get-polyline->3d-debug
           get-upsample-polyline->4d
-          get-sample-polyline->4d))
+          get-upsample-polyline->4d-debug
+          get-sample-polyline->4d
+          get-sample-polyline->4d-debug))
 
 (select-module elevation-profile)
 
@@ -69,6 +73,13 @@
       (lambda l
         (map f l)))))
 
+(define (dem-stack->xy->z-debug* . args)
+  (let-optionals* args ((projection "epsg:4326")
+                        (dem-stack (default-dem-stack)))
+    (let1 f (cute apply (dem-stack->xy->z-debug projection dem-stack) <>)
+      (lambda l
+        (map (lambda(x) (values->list (f x))) l)))))
+
 ;; todo: also in ...
 (define-macro (debug-assert e)
   `(when (not ,e)
@@ -86,12 +97,27 @@
 (define (polyline->3d get-z pl)
   (zip-append-elt pl (apply get-z pl)))
 
+(define (polyline->3d-debug get-z-debug pl)
+  (map append pl (apply get-z-debug pl)))
+
 (define (get-polyline->3d get-z)
   (cut polyline->3d get-z <>))
+
+(define (get-polyline->3d-debug get-z-debug)
+  (cut polyline->3d-debug get-z-debug <>))
 
 (define (get-upsample-polyline->4d get-z)
   (lambda(s pl max-dist)
     (geod-add-measure s (polyline->3d get-z (geod-upsample-polyline s pl max-dist)))))
+
+(define (get-upsample-polyline->4d-debug get-z-debug)
+  (lambda(s pl max-dist)
+    ;; we want x,y,z,d,res... instead of x,y,z,res,...,d
+    (map (lambda(p)
+           (append (subseq p 0 3)
+                   (list (last p))
+                   (subseq p 3 (- (length p) 1))))
+         (geod-add-measure s (polyline->3d-debug get-z-debug (geod-upsample-polyline s pl max-dist))))))
 
 ;; for profiling use:
 ;; (define (get-upsample-polyline->4d get-z)
@@ -106,3 +132,13 @@
       (zip-append-elt (polyline->3d get-z
                                     (map (cute subseq <> 0 2) plm))
                       (map (cute ref <> 2) plm)))))
+
+(define (get-sample-polyline->4d-debug get-z-debug)
+  (lambda(s pl samples)
+    (let1 plm (geod-sample-polyline-with-measure s pl samples)
+      (map (lambda(xyz-debug xyd)
+             (append (subseq xyz-debug 0 3)
+                     (list (last xyd))
+                     (subseq xyz-debug 3)))
+           (polyline->3d-debug get-z-debug (map (cute subseq <> 0 2) plm))
+           plm))))

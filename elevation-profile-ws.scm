@@ -46,12 +46,16 @@
 (select-module elevation-profile-ws)
 
 (define (create-context config)
-  (let1 get-z (apply dem-stack->xy->z* config)
+  (let ((get-z (apply dem-stack->xy->z* config))
+	(get-z-debug (apply dem-stack->xy->z-debug* config)))
     (alist->hash-table
      `((get-z . ,get-z)
        (polyline->3d . ,(get-polyline->3d get-z))
+       (polyline->3d-debug . ,(get-polyline->3d-debug get-z-debug))
        (upsample-polyline->4d . ,(get-upsample-polyline->4d get-z))
+       (upsample-polyline->4d-debug . ,(get-upsample-polyline->4d get-z-debug))
        (sample-polyline->4d . ,(get-sample-polyline->4d get-z))
+       (sample-polyline->4d-debug . ,(get-sample-polyline->4d get-z-debug))
        ))))
 
 ;; todo: also in ...
@@ -97,8 +101,9 @@
             r))))))
 
 (define round-z (round-at-func 2))
+(define round-res (round-at-func 2))
 
-(define (render-geojson pl)
+(define (render-geojson pl debug)
   (list (cgi-header :content-type "text/javascript"
 		    :|Access-Control-Allow-Origin| "*")
 	(construct-json-string
@@ -110,9 +115,14 @@
 							  ("geometry" . (("type" . "MultiPoint")
 									 ("coordinates" . ,(map-to <vector>
 												   (lambda (p)
-												     (vector (car p)
-													     (cadr p)
-													     (round-z (caddr p))))
+												     (if (not debug)
+												       (vector (car p)
+													       (cadr p)
+													       (round-z (caddr p)))
+												       (vector (car p)
+													       (cadr p)
+													       (round-z (caddr p))
+													       (round-res (cadddr p)))))
 												   pl))))))))))))))))
 
 (define (points->sxml pl)
@@ -135,22 +145,23 @@
   (hack
    (let ((query (google-elevation-query params))
          ;; todo: restrict allowed values
-         (jscallback (cgi-get-parameter "callback" params :default "")))
+         (jscallback (cgi-get-parameter "callback" params :default ""))
+	 (debug (cgi-get-parameter "debug" params)))
      ((assoc-ref `(("js"      . ,(cut google-elevation-v3-out jscallback <>))
 		   ("sjs"     . ,(cut google-elevation-simple-out jscallback <>))
 		   ("xml"     . ,(compose render-xml points->sxml))
 		   ("sxml"    . ,(compose render-sxml points->sxml))
 		   ("sexpr"   . ,render-sexpr)
 		   ("svg"     . ,render-svg)
-		   ("geojson" . ,render-geojson))
+		   ("geojson" . ,(cut render-geojson <> debug))
 		 (cgi-get-parameter "format" params :default "js"))
       (case (car query)
 	[(path-elevation-sample)
-	 (apply (ref context 'sample-polyline->4d) (cdr query))]
+	 (apply (ref context (string->symbol (string-append "sample-polyline->4d" (if debug "-debug" "")))) (cdr query))]
 	[(path-elevation-upsample)
-	 (apply (ref context 'upsample-polyline->4d) (cdr query))]
+	 (apply (ref context (string->symbol (string-append "upsample-polyline->4d" (if debug "-debug" "")))) (cdr query))]
 	[(elevation)
-	 (apply (ref context 'polyline->3d) (cdr query))]
+	 (apply (ref context (string->symbol (string-append "polyline->3d" (if debug "-debug" "")))) (cdr query))]
 	[else
 	 (error "todo")])))))
 
