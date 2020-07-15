@@ -53,9 +53,9 @@
        (polyline->3d . ,(get-polyline->3d get-z))
        (polyline->3d-debug . ,(get-polyline->3d-debug get-z-debug))
        (upsample-polyline->4d . ,(get-upsample-polyline->4d get-z))
-       (upsample-polyline->4d-debug . ,(get-upsample-polyline->4d get-z-debug))
+       (upsample-polyline->4d-debug . ,(get-upsample-polyline->4d-debug get-z-debug))
        (sample-polyline->4d . ,(get-sample-polyline->4d get-z))
-       (sample-polyline->4d-debug . ,(get-sample-polyline->4d get-z-debug))
+       (sample-polyline->4d-debug . ,(get-sample-polyline->4d-debug get-z-debug))
        ))))
 
 ;; todo: also in ...
@@ -101,6 +101,7 @@
             r))))))
 
 (define round-z (round-at-func 2))
+(define round-d (round-at-func 2))
 (define round-res (round-at-func 2))
 
 (define (render-geojson pl debug)
@@ -109,21 +110,32 @@
 	(construct-json-string
 	 `(("header" . (("status" . "ok")))
 	   ("answer" . (("type" . "elevation")
-			("contents" . #((("type" . "FeatureCollection")
-					 ("features" . #((("type" . "Feature")
-							  ("properties" . ())
-							  ("geometry" . (("type" . "MultiPoint")
-									 ("coordinates" . ,(map-to <vector>
-												   (lambda (p)
-												     (if (not debug)
-												       (vector (car p)
-													       (cadr p)
-													       (round-z (caddr p)))
-												       (vector (car p)
-													       (cadr p)
-													       (round-z (caddr p))
-													       (round-res (cadddr p)))))
-												   pl))))))))))))))))
+			("contents"
+                         . #((("type" . "FeatureCollection")
+                              ("features" . #((("type" . "Feature")
+                                               ("properties" . ())
+                                               ("geometry" . (("type" . "MultiPoint")
+                                                              ("coordinates" . ,(map-to <vector>
+                                                                                        (lambda (p)
+                                                                                          (cond [(not debug)
+                                                                                                 ;; note: we always drop d
+                                                                                                 (vector (car p)
+                                                                                                         (cadr p)
+                                                                                                         (round-z (caddr p)))]
+                                                                                                [(= (length p) 4)
+                                                                                                 (vector (car p)
+                                                                                                         (cadr p)
+                                                                                                         (round-z (caddr p))
+                                                                                                         (round-res (cadddr p)))]
+                                                                                                [(= (length p) 5)
+                                                                                                 (vector (list-ref p 0)
+                                                                                                         (list-ref p 1)
+                                                                                                         (round-z (list-ref p 2))
+                                                                                                         (round-d (list-ref p 3))
+                                                                                                         (round-res (list-ref p 4)))]
+                                                                                                [else
+                                                                                                 (error "todo")]))
+                                                                                        pl))))))))))))))))
 
 (define (points->sxml pl)
   `(result . ,(map (lambda(p)
