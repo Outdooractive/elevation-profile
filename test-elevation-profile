@@ -182,7 +182,7 @@
            (and (string=? status "200")
                 (let1 json (parse-json-string body)
                   (string=? (json-ref json '(header status)) "ok")
-                  (= (size-of (json-ref json '(answer contents 0 features 0 geometry coordinates 0))) 4)))))
+                  (= (size-of (json-ref json '(answer contents 0 features 0 geometry coordinates 0))) 5)))))
   (test* "web service geojson debug output upsample"
          #t
          (receive (status headers body)
@@ -194,7 +194,7 @@
            (and (string=? status "200")
                 (let1 json (parse-json-string body)
                   (and (string=? (json-ref json '(header status)) "ok")
-                       (every (cut = <> 5)
+                       (every (cut = <> 6)
                               (map size-of (json-ref json '(answer contents 0 features 0 geometry coordinates)))))))))
 
   (test* "web service geojson debug output sample"
@@ -208,7 +208,7 @@
            (and (string=? status "200")
                 (let1 json (parse-json-string body)
                   (and (string=? (json-ref json '(header status)) "ok")
-                       (every (cut = <> 5)
+                       (every (cut = <> 6)
                               (map size-of (json-ref json '(answer contents 0 features 0 geometry coordinates)))))))))
 (test-end)
   0)
