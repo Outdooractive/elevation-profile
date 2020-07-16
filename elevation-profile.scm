@@ -75,10 +75,10 @@
                (cons (car l) (append
                               (delete-keyword :next (cdr l))
                               `(:next ,(cond [(number? ov)
-                                              (lambda _ (values ov
-                                                                ;; resolution in m
-                                                                (* 6378137 2 pi)
-                                                                ))]
+                                              (lambda (x y :optional (depth 0)) (values ov
+                                                                          ;; resolution in m
+                                                                          (* 6378137 2 pi)
+                                                                          depth))]
                                              [else
                                               ;; todo: maybe just eval?!
                                               (error "not allowed" ov)])))))

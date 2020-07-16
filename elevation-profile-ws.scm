@@ -122,17 +122,19 @@
                                                                                                  (vector (car p)
                                                                                                          (cadr p)
                                                                                                          (round-z (caddr p)))]
-                                                                                                [(= (length p) 4)
-                                                                                                 (vector (car p)
-                                                                                                         (cadr p)
-                                                                                                         (round-z (caddr p))
-                                                                                                         (round-res (cadddr p)))]
                                                                                                 [(= (length p) 5)
                                                                                                  (vector (list-ref p 0)
                                                                                                          (list-ref p 1)
                                                                                                          (round-z (list-ref p 2))
+                                                                                                         (round-res (list-ref p 3))
+                                                                                                         (list-ref p 4))]
+                                                                                                [(= (length p) 6)
+                                                                                                 (vector (list-ref p 0)
+                                                                                                         (list-ref p 1)
+                                                                                                         (round-z (list-ref p 2))
                                                                                                          (round-d (list-ref p 3))
-                                                                                                         (round-res (list-ref p 4)))]
+                                                                                                         (round-res (list-ref p 4))
+                                                                                                         (list-ref p 5))]
                                                                                                 [else
                                                                                                  (error "todo")]))
                                                                                         pl))))))))))))))))

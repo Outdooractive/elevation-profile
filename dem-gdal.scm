@@ -928,7 +928,7 @@
             (else (error "Unknown interpolation:" interpolation))))))))
 
 (define (dem->xy-project->z-debug projection name . args)
-  (let-keywords args ((next (lambda _ (values +nan.0 +nan.0)))
+  (let-keywords args ((next (lambda (x y depth) (values +nan.0 +nan.0 depth)))
                       (interpolation 'bi-cubic)
                       (band 1))
                 (let* ((dataset (gdal-open-dataset name))
@@ -977,16 +977,17 @@
                                                                      (guard (e [(transform-error? e)
                                                                                 #f])
                                                                             (nan-to-false (apply read-pixel (rasterpos x y)))))))
-                                              (lambda(x y)
+                                              (lambda(x y :optional (depth 0))
                                                 (if (not (rasterpos&bbox! x y rp box))
-                                                  (next x y)
+                                                  (next x y (+ depth 1))
                                                   (let* ((nans (read-box!))
                                                          (c (map floor (list (f64vector-ref rp 0) (f64vector-ref rp 1))))
                                                          (xres (geod-distance 'wgs84 (rasterpos⁻¹ c) (rasterpos⁻¹ (map + c '(1 0)))))
                                                          (yres (geod-distance 'wgs84 (rasterpos⁻¹ c) (rasterpos⁻¹ (map + c '(0 1)))))
-                                                         (res (max xres yres)))
+                                                         (res (max xres yres))
+                                                         (max-depth depth))
                                                     (cond [(= nans (* box-width box-height))
-                                                           (next x y)]
+                                                           (next x y (+ depth 1))]
                                                           [(> nans 0)
                                                            ;; try to replace nan
                                                            ;; todo: maybe split into geographic and non-geographic case?
@@ -1007,24 +1008,27 @@
                                                                                                (read-geo-pixel cx cy))))
                                                                           (if nv
                                                                             (set! (ref r rx) nv)
-                                                                            (let1 next-value (values->list (next cx cy))
+                                                                            (let1 next-value (values->list (next cx cy (+ depth 1)))
                                                                               (cond [(nan-to-false (car next-value))
                                                                                      (set! (ref r rx) (car next-value))
-                                                                                     (set! res (max res (cadr next-value)))]
+                                                                                     (set! res (max res (cadr next-value)))
+                                                                                     (set! max-depth (max max-depth (caddr next-value)))]
                                                                                     [else
                                                                                      ;; failed to replace nan
-                                                                                     (break (next x y))])))))))
+                                                                                     (break (next x y (+ depth 1)))])))))))
                                                                   r))
                                                                rows)
                                                               ;; (assert (not (any (cut find nan? <>) rows)))
                                                               (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
                                                                 (values (fi u v rows)
-                                                                        res))))]
+                                                                        res
+                                                                        max-depth))))]
                                                           [else
                                                            ;; (assert (zero? nans))
                                                            (receive (u v) (raster-pos->uv (f64vector-ref rp 0) (f64vector-ref rp 1))
                                                              (values (fi u v rows)
-                                                                     res))]))))))))
+                                                                     res
+                                                                     max-depth))]))))))))
                       (case interpolation
                         ((bi-cubic)  (xy->z-debug interp-bicubic raster-pos->4x4-box 4 4))
                         ((bi-linear) (xy->z-debug interp-bilinear raster-pos->2x2-box 2 2))
