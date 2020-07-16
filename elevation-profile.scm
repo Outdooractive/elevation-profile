@@ -36,6 +36,7 @@
   (use gauche.sequence)
   (use dem-gdal)
   (use geod)
+  (use math.const)
   (export dem-stack->xy->z*
           dem-stack->xy->z-debug*
           get-polyline->3d
@@ -66,6 +67,24 @@
              l))
        (with-input-from-file "/etc/elevation-profile" read)))
 
+(define (default-dem-stack-debug)
+  (map (lambda(l)
+         (if (keyword-exists? :next (cdr l))
+             ;; replace
+             (let1 ov (get-keyword :next (cdr l))
+               (cons (car l) (append
+                              (delete-keyword :next (cdr l))
+                              `(:next ,(cond [(number? ov)
+                                              (lambda _ (values ov
+                                                                ;; resolution in m
+                                                                (* 6378137 2 pi)
+                                                                ))]
+                                             [else
+                                              ;; todo: maybe just eval?!
+                                              (error "not allowed" ov)])))))
+             l))
+       (with-input-from-file "/etc/elevation-profile" read)))
+
 (define (dem-stack->xy->z* . args)
   (let-optionals* args ((projection "epsg:4326")
                         (dem-stack (default-dem-stack)))
@@ -75,7 +94,7 @@
 
 (define (dem-stack->xy->z-debug* . args)
   (let-optionals* args ((projection "epsg:4326")
-                        (dem-stack (default-dem-stack)))
+                        (dem-stack (default-dem-stack-debug)))
     (let1 f (cute apply (dem-stack->xy->z-debug projection dem-stack) <>)
       (lambda l
         (map (lambda(x) (values->list (f x))) l)))))
