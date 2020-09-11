@@ -1,7 +1,8 @@
 [Unit]
 Description=elevation-profile per-connection server
+Requires = fcgi-elevation-profile.socket
 
 [Service]
-ExecStart=-/usr/bin/elevation-profile-repl
+ExecStart=-/usr/local/bin/elevation-profile-repl
 StandardInput=socket
 User=elevation-profile
