@@ -3,6 +3,6 @@ Description=elevation-profile per-connection server
 Requires = elevation-profile.socket
 
 [Service]
-ExecStart=-/usr/local/bin/elevation-profile-repl
+ExecStart=-/usr/bin/elevation-profile-repl
 StandardInput=socket
 User=elevation-profile
