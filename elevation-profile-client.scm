@@ -1,7 +1,7 @@
 ;;;
 ;;; elevation profile web-service client
 ;;;
-;;;   Copyright (c) 2012 Jens Thiele <karme@karme.de>
+;;;   Copyright (c) 2012,2013,2020 Jens Thiele <karme@karme.de>
 ;;;   
 ;;;   Redistribution and use in source and binary forms, with or without
 ;;;   modification, are permitted provided that the following conditions
@@ -51,20 +51,22 @@
                "|"))
 
 ;; todo: temporarily ignore or block sigpipe?!
-(define (elevation-profile-http-request server request-uri method params reader)
+(define (elevation-profile-http-request server request-uri method params reader . args)
   (let1 tc (make <real-time-counter>)
     (receive (status headers body)
         (with-time-counter tc (case method
                                 [(post)
-                                 (http-post server
-                                            request-uri
-                                            ;; ugly workaround for server side bug!
-                                            ;; now using workaround on server side => disabled
-                                            ;; (subseq (http-compose-query "" params) 1))
-                                            params)]
+                                 (apply http-post (append (list server
+                                                                request-uri
+                                                                ;; ugly workaround for server side bug!
+                                                                ;; now using workaround on server side => disabled
+                                                                ;; (subseq (http-compose-query "" params) 1))
+                                                                params)
+                                                          args))]
                                 [(get)
-                                 (http-get server
-                                           (http-compose-query request-uri params))]
+                                 (apply http-get (append (list server
+                                                               (http-compose-query request-uri params))
+                                                         args))]
                                 [else
                                  (error "todo")]))
       (case (x->number status)
@@ -84,11 +86,12 @@
          (read-from-string s)))
 
 (define (sexpr-http-request service params)
-  (elevation-profile-http-request (car service)
-                                  (cadr service)
-                                  'post
-                                  (append params '((format sexpr)))
-                                  my-read-from-string))
+  (apply elevation-profile-http-request (append (list (car service)
+                                                      (cadr service)
+                                                      'post
+                                                      (append params '((format sexpr)))
+                                                      my-read-from-string)
+                                                (cddr service))))
 
 (define (polyline->3d service pl . args)
   (sexpr-http-request service (append args
