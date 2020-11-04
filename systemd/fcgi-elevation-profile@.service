@@ -1,5 +1,6 @@
 [Unit]
 Description = elevation-profile FastCGI service (instance %i)
+Requires = fcgi-elevation-profile@%i.socket
 
 [Service]
 User = fcgi-elevation-profile
