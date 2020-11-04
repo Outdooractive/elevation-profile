@@ -1,5 +1,5 @@
 PACKAGE  = elevation-profile
-VERSION  = 0.9.36
+VERSION  = 0.9.37
 
 INSTALL = install
 INSTALL_DATA = $(INSTALL) -m 644
